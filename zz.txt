@@ -1,0 +1,188 @@
+import { NextResponse } from 'next/server';
+import Parser from 'rss-parser';
+import { v2 as cloudinary } from 'cloudinary';
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true, // Enforce HTTPS, per modern SDK default[](https://cloudinary.com/documentation/cloudinary_sdks)
+});
+
+// Parser setup (unchanged)
+const parser = new Parser({
+  customFields: {
+    item: ['media:thumbnail'],
+  },
+});
+
+export async function GET() {
+  try {
+    const feed = await parser.parseURL('https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml');
+    const latestItem = feed.items[0];
+    if (!latestItem) throw new Error('No items found');
+
+    const headline = latestItem.title ?? '';
+    const description = latestItem.contentSnippet || (latestItem as any).description || '';
+    const imageUrl = latestItem['media:thumbnail']?.$?.url ?? null;
+    const link = latestItem.guid ?? null;
+
+    // Filter for entertainment keywords
+    const isRelevant = ['actor', 'movie', 'musician', 'celebrity', 'filming', 'director', 'plays', 'marvel', 'mcu', 'DCU', 'DC', 'spiderman', 'Hollywood'].some(keyword =>
+      headline.toLowerCase().includes(keyword) || description.toLowerCase().includes(keyword)
+    );
+    if (!isRelevant) {
+      return NextResponse.json({ success: false, message: 'No relevant entertainment news found' });
+    }
+
+    // Generate caption
+    const presetCaption = `🌟 Hollywood Buzz: ${headline}\n${description.substring(0, 100)}...\n#Celebs #Movies via BBC`;
+
+// Apply image edit preset with Cloudinary
+    let editedImageUrl = null;
+    if (imageUrl) {
+      try {
+        editedImageUrl = cloudinary.url(imageUrl.split('/').pop() || 'placeholder', {
+          transformation: [
+            { width: 1080, height: 1080, crop: 'fill', gravity: 'center' }, // Resize for Instagram
+            {
+              overlay: {
+                font_family: 'Arial',
+                font_size: 40,
+                font_weight: 'bold',
+                text: encodeURIComponent(headline.substring(0, 30)), // URL-safe headline
+              },
+              color: '#FFFFFF',
+              gravity: 'south', // Fixed: Replaced DVR
+              y: 20, // Comma added here
+            },
+            { fetch_format: 'auto', quality: 'auto' }, // Optimize
+          ],
+          secure: true,
+        });
+      } catch (error) {
+        console.error('Cloudinary error:', error);
+        editedImageUrl = 'https://placehold.co/1080x1080?text=Edit+Failed';
+      }
+    } else {
+      editedImageUrl = 'https://placehold.co/1080x1080?text=No+Image';
+    }
+
+    // Simulate posting
+    const postPayload = {
+      instagram: { image_url: editedImageUrl, caption: presetCaption },
+      twitter: { text: presetCaption, media: { media_urls: [editedImageUrl] } },
+      tiktok: { description: presetCaption, video: editedImageUrl /* Placeholder for video conversion */ },
+    };
+    console.log('Simulated post:', JSON.stringify(postPayload, null, 2));
+
+    return NextResponse.json({
+      success: true,
+      headline,
+      description: description.substring(0, 100),
+      originalImage: imageUrl,
+      caption: presetCaption,
+      editedImage: editedImageUrl,
+      link,
+    });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
+  }
+}
+
+// import { NextResponse } from "next/server";
+// import Parser from "rss-parser";
+// import { v2 as cloudinary } from 'cloudinary';
+
+// // Configure Cloudinary
+// cloudinary.config({
+//   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+//   api_key: process.env.CLOUDINARY_API_KEY,
+//   api_secret: process.env.CLOUDINARY_API_SECRET,
+// });
+
+// const parser = new Parser({
+//   customFields: {
+//     item: ["media:thumbnail"] // keep raw <media:thumbnail>
+//   }
+// });
+
+// export async function GET() {
+//   try {
+//     const feed = await parser.parseURL(
+//       "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"
+//     );
+
+//     const latestItem = feed.items[0];
+//     if (!latestItem) throw new Error("No items found");
+
+//     // console.log(latestItem)
+
+//     const headline = latestItem.title ?? "";
+//     const description =
+//       latestItem.contentSnippet ||
+//       (latestItem as any).description ||
+//       "";
+
+//     // ✅ Normalize thumbnail manually
+//     const imageUrl = latestItem["media:thumbnail"]?.$?.url ?? null;
+
+//     const link = latestItem.guid ?? null;
+
+//     // Filter for entertainment keywords
+//     const isRelevant = ['actor', 'movie', 'musician', 'celebrity', 'plays', 'marvel', 'mcu', 'DCU', 'DC', 'spiderman', 'Hollywood'].some(keyword =>
+//       headline.toLowerCase().includes(keyword) || description.toLowerCase().includes(keyword)
+//     );
+//     if (!isRelevant) {
+//       return NextResponse.json({ success: false, message: 'No relevant entertainment news found' });
+//     }
+
+//     const presetCaption = `🌟 Hollywood Buzz: ${headline}\n${description.substring(
+//       0,
+//       100
+//     )}...\n#Celebs #Movies via BBC`;
+
+//     // Apply image edit preset with Cloudinary
+//     let editedImageUrl = null;
+//     if (imageUrl) {
+//       editedImageUrl = cloudinary.url(imageUrl, {
+//         transformation: [
+//           { width: 1080, height: 1080, crop: 'fill', gravity: 'center' }, // Resize for Instagram
+//           {
+//             overlay: {
+//               font_family: 'Arial',
+//               font_size: 40,
+//               font_weight: 'bold',
+//               text: headline.substring(0, 30), // Shorten for readability
+//             },
+//             color: 'white',
+//             gravity: 'south',
+//             y: 20,
+//           }, // Overlay headline
+//         ],
+//       });
+//     } else {
+//       editedImageUrl = 'https://placehold.co/1080x1080?text=No+Image'; // Fallback
+//     }
+
+//     // Simulate posting
+//     console.log(`Ready to post: Caption - ${presetCaption}, Image - ${editedImageUrl}, Link - ${link}`);
+//     console.log('Simulated post to Instagram, Twitter, TikTok');
+
+//     return NextResponse.json({
+//       success: true,
+//       headline,
+//       description: description.substring(0, 100),
+//       originalImage: imageUrl,
+//       caption: presetCaption,
+//       editedImage: editedImageUrl,
+//       link: link,
+//     });
+//   } catch (error) {
+//     return NextResponse.json(
+//       { success: false, error: (error as Error).message },
+//       { status: 500 }
+//     );
+//   }
+// }
