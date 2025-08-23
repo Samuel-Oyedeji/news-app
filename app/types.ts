@@ -8,14 +8,10 @@ export interface NewsApiResponse {
   editedImage?: string | null;
   platformImages?: {
     instagram: string;
-    twitter: string;
-    tiktok: string;
   };
   link?: string | null;
   postPayload?: {
     instagram: { image_url: string | null; caption: string };
-    twitter: { text: string; media: { media_urls: (string | null)[] } };
-    tiktok: { description: string; video: string | null };
   };
   message?: string; // For error cases
   error?: string; // Add this
