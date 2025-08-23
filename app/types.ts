@@ -6,6 +6,11 @@ export interface NewsApiResponse {
   originalImage?: string | null;
   caption?: string;
   editedImage?: string | null;
+  platformImages?: {
+    instagram: string;
+    twitter: string;
+    tiktok: string;
+  };
   link?: string | null;
   postPayload?: {
     instagram: { image_url: string | null; caption: string };
