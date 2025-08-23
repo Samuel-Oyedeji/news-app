@@ -9,6 +9,27 @@ const parser = new Parser({
   },
 });
 
+// Function to add line breaks at word boundaries for better text wrapping
+function addLineBreaks(text: string, charsPerLine: number = 50): string {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+  
+  for (const word of words) {
+    if ((currentLine + word).length <= charsPerLine) {
+      currentLine += (currentLine ? ' ' : '') + word;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  
+  if (currentLine) lines.push(currentLine);
+  
+  // Join lines with %0A (URL-encoded line break)
+  return lines.join('%0A');
+}
+
 // Function to truncate headline intelligently at word boundaries
 function truncateHeadline(headline: string, maxLength: number = 200): string {
   if (headline.length <= maxLength) return headline;
@@ -39,9 +60,10 @@ function generateInstagramImage(
 
   for (const [platform, platformConfig] of Object.entries(platforms)) {
     // Hard-coded values for square format
-    const baseFontSize = 24;
+    const baseFontSize = 10;
     const textWidth = 1000; // 1080 - 80px margins
-    const truncatedHeadline = truncateHeadline(headline, 200);
+    // Use full headline for image text with automatic line breaks for better wrapping
+    const imageHeadline = addLineBreaks(headline, 40); // Add line break every ~50 characters
 
     const options = {
       src: imageUrl,
@@ -57,15 +79,15 @@ function generateInstagramImage(
         {
           position: {
             gravity: "south" as const,
-            y: 78,
-            x: 0,
+            y: 30,
+            x: 4,
           },
           text: {
             color: "white",
             fontFamily: "Source Sans Pro",
             fontSize: baseFontSize,
             fontWeight: "bold" as const,
-            text: truncatedHeadline,
+            text: imageHeadline,
             textAlign: "center" as const,
             width: textWidth, // Dynamic width based on platform
             crop: "fit",
@@ -112,7 +134,11 @@ export async function GET() {
       });
     }
 
-    const presetCaption = `🌟 Hollywood Buzz: ${headline}\n${description.substring(0, 100)}...\n#Celebs #Movies via BBC`.substring(0, 280);
+    // Create caption with full description truncated to 200 words + link
+    const words = description.split(' ');
+    const truncatedDescription = words.slice(0, 200).join(' ');
+    const captionWithLink = link ? `${truncatedDescription}...\n\nRead more: ${link}\n\n#Celebs #Movies #Hollywood` : `${truncatedDescription}...\n\n#Celebs #Movies #Hollywood`;
+    const presetCaption = captionWithLink.substring(0, 280);
 
     let platformImages: { instagram: string } | null = null;
     if (imageUrl) {
