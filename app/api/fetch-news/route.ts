@@ -63,7 +63,7 @@ function generateInstagramImage(
     const baseFontSize = 10;
     const textWidth = 1000; // 1080 - 80px margins
     // Use full headline for image text with automatic line breaks for better wrapping
-    const imageHeadline = addLineBreaks(headline, 40); // Add line break every ~50 characters
+    const imageHeadline = addLineBreaks(headline, 35); // Add line break every ~50 characters
 
     const options = {
       src: imageUrl,
@@ -79,8 +79,8 @@ function generateInstagramImage(
         {
           position: {
             gravity: "south" as const,
-            y: 30,
-            x: 4,
+            y: 5,
+            x: 13,
           },
           text: {
             color: "white",
