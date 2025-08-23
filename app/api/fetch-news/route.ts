@@ -51,7 +51,7 @@ function generateInstagramImage(
   headline: string
 ): { instagram: string } {
   const platforms = {
-    instagram: { width: 1080, height: 1080, crop: "fill" as const }, // Square
+    instagram: { width: 414, height: 517, crop: "fill" as const }, // Square
   };
 
   const results: { instagram: string } = {
@@ -59,11 +59,11 @@ function generateInstagramImage(
   };
 
   for (const [platform, platformConfig] of Object.entries(platforms)) {
-    // Hard-coded values for square format
-    const baseFontSize = 10;
+    // Hard-coded values for square format - optimized for high quality
+    const baseFontSize = 32; // Increased for better quality
     const textWidth = 1000; // 1080 - 80px margins
     // Use full headline for image text with automatic line breaks for better wrapping
-    const imageHeadline = addLineBreaks(headline, 35); // Add line break every ~50 characters
+    const imageHeadline = addLineBreaks(headline, 40); // Increased for better readability
 
     const options = {
       src: imageUrl,
@@ -74,19 +74,20 @@ function generateInstagramImage(
       gravity: "center" as const,
       format: "auto" as const,
       quality: "auto" as const,
+      fetchFormat: "auto" as const, // Auto-detect source format
       overlays: [
         // White main text (auto-wrapping)
         {
           position: {
             gravity: "south" as const,
             y: 5,
-            x: 13,
+            x: 6,
           },
           text: {
             color: "white",
             fontFamily: "Source Sans Pro",
             fontSize: baseFontSize,
-            fontWeight: "bold" as const,
+            fontWeight: "900" as const, // Extra bold for better visibility
             text: imageHeadline,
             textAlign: "center" as const,
             width: textWidth, // Dynamic width based on platform
