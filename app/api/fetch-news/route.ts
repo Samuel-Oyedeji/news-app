@@ -139,11 +139,26 @@ export async function GET() {
     //   });
     // }
 
-    // Create caption with full description truncated to 200 words + link
+    // Create caption with full description truncated to fit Instagram's limit
     const words = description.split(' ');
-    const truncatedDescription = words.slice(0, 200).join(' ');
-    const captionWithLink = link ? `${truncatedDescription}...\n\nRead more: ${link}\n\n#Celebs #Movies #Hollywood` : `${truncatedDescription}...\n\n#Celebs #Movies #Hollywood`;
-    const presetCaption = captionWithLink.substring(0, 280);
+    
+    // Popular hashtags for entertainment news
+    const hashtags = '#Entertainment #News #Celebs #Movies #Hollywood #Film #TV #Celebrity #Showbiz #Trending';
+    
+    // Calculate space needed for link and hashtags
+    const linkSection = link ? `\n\nRead more: ${link}` : '';
+    const hashtagSection = `\n\n${hashtags}`;
+    const reservedSpace = linkSection.length + hashtagSection.length + 10; // +10 for safety
+    
+    // Truncate description to leave space for link and hashtags
+    const maxDescriptionLength = 2200 - reservedSpace; // Instagram caption limit is 2200 characters
+    const truncatedDescription = words.slice(0, Math.floor(maxDescriptionLength / 6)).join(' '); // ~6 chars per word average
+    
+    const captionWithLink = link 
+      ? `${truncatedDescription}...${linkSection}${hashtagSection}` 
+      : `${truncatedDescription}...${hashtagSection}`;
+    
+    const presetCaption = captionWithLink;
 
     let platformImages: { instagram: string } | null = null;
     if (imageUrl) {
