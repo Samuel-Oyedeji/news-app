@@ -51,7 +51,7 @@ function generateInstagramImage(
   headline: string
 ): { instagram: string } {
   const platforms = {
-    instagram: { width: 414, height: 517, crop: "fill" as const }, // Square
+    instagram: { width: 1080, height: 1080, crop: "fill" as const }, // Square
   };
 
   const results: { instagram: string } = {
@@ -60,8 +60,8 @@ function generateInstagramImage(
 
   for (const [platform, platformConfig] of Object.entries(platforms)) {
     // Hard-coded values for square format - optimized for high quality
-    const baseFontSize = 32; // Increased for better quality
-    const textWidth = 1000; // 1080 - 80px margins
+    const baseFontSize = 280; // Increased for better quality
+    const textWidth = 500; // 1080 - 80px margins
     // Use full headline for image text with automatic line breaks for better wrapping
     const imageHeadline = addLineBreaks(headline, 40); // Increased for better readability
 
@@ -71,30 +71,34 @@ function generateInstagramImage(
       width: platformConfig.width,
       height: platformConfig.height,
       crop: platformConfig.crop,
-      gravity: "center" as const,
+      gravity: "auto:subject" as const,
       format: "auto" as const,
       quality: "auto" as const,
       fetchFormat: "auto" as const, // Auto-detect source format
-      overlays: [
-        // White main text (auto-wrapping)
-        {
-          position: {
-            gravity: "south" as const,
-            y: 5,
-            x: 6,
-          },
-          text: {
-            color: "white",
-            fontFamily: "Source Sans Pro",
-            fontSize: baseFontSize,
-            fontWeight: "900" as const, // Extra bold for better visibility
-            text: imageHeadline,
-            textAlign: "center" as const,
-            width: textWidth, // Dynamic width based on platform
-            crop: "fit",
-          },
-        },
-      ],
+      // overlays: [
+      //   // White main text (auto-wrapping)
+      //   {
+      //     position: {
+      //       gravity: "south" as const,
+      //       y: 5,
+      //       x: 6,
+      //     },
+      //     text: {
+      //       color: "white",
+      //       fontFamily: "Impact",
+      //       fontSize: baseFontSize,
+      //       fontWeight: "600" as const, // Extra bold for better visibility
+      //       border: "1px_solid_red",
+      //       // letterSpacing: 10,
+      //       // lineSpacing: 10,
+      //       // text_align: "left" as const,
+      //       text: imageHeadline,
+      //       // width: textWidth, // Dynamic width based on platform
+      //       crop: "textFit",
+      //       flags: "text_no_trim"
+      //     },
+      //   },
+      // ],
     };
 
     const cloudinaryConfig = {
@@ -115,7 +119,7 @@ function generateInstagramImage(
 
 export async function GET() {
   try {
-    const feed = await parser.parseURL('https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml');
+    const feed = await parser.parseURL('https://variety.com/v/film/feed/');
     const latestItem = feed.items[0];
     if (!latestItem) throw new Error('No items found');
 
@@ -124,16 +128,16 @@ export async function GET() {
     const imageUrl = latestItem['media:thumbnail']?.$?.url ?? null;
     const link = latestItem.guid ?? null;
 
-    const keywords = ['actor', 'movie', 'musician', 'celebrity', 'LA', 'arrested', 'charged', 'filming', 'star', 'stars', 'director', 'plays', 'marvel', 'mcu', 'DCU', 'DC', 'spiderman', 'Hollywood'];
-    const isRelevant = keywords.some(keyword =>
-      headline.toLowerCase().includes(keyword) || description.toLowerCase().includes(keyword)
-    );
-    if (!isRelevant) {
-      return NextResponse.json<NewsApiResponse>({
-        success: false,
-        message: 'No relevant entertainment news found',
-      });
-    }
+    // const keywords = ['actor', 'movie', 'musician', 'celebrity', 'LA', 'arrested', 'masterpieces', 'charged', 'filming', 'star', 'stars', 'director', 'plays', 'marvel', 'mcu', 'DCU', 'DC', 'spiderman', 'Hollywood'];
+    // const isRelevant = keywords.some(keyword =>
+    //   headline.toLowerCase().includes(keyword) || description.toLowerCase().includes(keyword)
+    // );
+    // if (!isRelevant) {
+    //   return NextResponse.json<NewsApiResponse>({
+    //     success: false,
+    //     message: 'No relevant entertainment news found',
+    //   });
+    // }
 
     // Create caption with full description truncated to 200 words + link
     const words = description.split(' ');
