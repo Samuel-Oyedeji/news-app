@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import Parser from 'rss-parser';
 import { getCldImageUrl } from 'next-cloudinary';
 import { NewsApiResponse } from '../../types';
+import sizeOf from "image-size";
+import { Buffer } from "buffer";
+import fetch from "node-fetch";
 
 const parser = new Parser({
   customFields: {
@@ -10,11 +13,14 @@ const parser = new Parser({
 });
 
 // Function to add line breaks at word boundaries for better text wrapping
-function addLineBreaks(text: string, charsPerLine: number = 50): string {
+function addLineBreaks(text: string, imageWidth: number, fontSize: number): string {
+  // Estimate how many characters can fit per line based on image width and font size
+  const charsPerLine = Math.floor(imageWidth / (fontSize * 0.6));
+
   const words = text.split(' ');
   const lines: string[] = [];
   let currentLine = '';
-  
+
   for (const word of words) {
     if ((currentLine + word).length <= charsPerLine) {
       currentLine += (currentLine ? ' ' : '') + word;
@@ -23,15 +29,15 @@ function addLineBreaks(text: string, charsPerLine: number = 50): string {
       currentLine = word;
     }
   }
-  
+
   if (currentLine) lines.push(currentLine);
-  
-  // Join lines with %0A (URL-encoded line break)
-  return lines.join('%0A');
+
+  return lines.join('%0A'); // URL-encoded line break
 }
 
+
 // Function to truncate headline intelligently at word boundaries
-function truncateHeadline(headline: string, maxLength: number = 200): string {
+function truncateHeadline(headline: string, maxLength: number = 70): string {
   if (headline.length <= maxLength) return headline;
   
   // Try to find a word boundary near the max length
@@ -46,12 +52,12 @@ function truncateHeadline(headline: string, maxLength: number = 200): string {
 }
 
 // Function to generate Instagram image with wrapped + scaled text
-function generateInstagramImage(
+async function generateInstagramImage(
   imageUrl: string,
   headline: string
-): { instagram: string } {
+): Promise<{ instagram: string }> {
   const platforms = {
-    instagram: { width: 1080, height: 1080, crop: "fill" as const }, // Square
+    instagram: { width: 1080, height: 1080, crop: "crop" as const }, // Square
   };
 
   const results: { instagram: string } = {
@@ -59,11 +65,42 @@ function generateInstagramImage(
   };
 
   for (const [platform, platformConfig] of Object.entries(platforms)) {
-    // Hard-coded values for square format - optimized for high quality
-    const baseFontSize = 280; // Increased for better quality
-    const textWidth = 500; // 1080 - 80px margins
+
+    async function getImageWidth(url: string): Promise<number> {
+      const res = await fetch(url);
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const { width } = sizeOf(buffer);
+      if (!width) throw new Error("Could not determine image width");
+      return width;
+    }
+
+    // Default values
+    let baseFontSize = 80; 
+    let baseimgwidth = 900;
+    let realimgWidth = 1080;
+
+    try {
+      // Dynamically fetch image width
+      const imgWidth = await getImageWidth(imageUrl);
+
+      // Scale font size as ~5% of image width
+      const dynamicSize = Math.round(imgWidth * 0.05); // 5% of width
+      const txtbaseimgwidth = Math.round(imgWidth * 0.8);
+
+      // Keep it within safe bounds
+      realimgWidth = imgWidth;
+      baseimgwidth = txtbaseimgwidth;
+      baseFontSize = dynamicSize;
+    } catch (err) {
+      console.error("Font size fallback (could not fetch image size):", err);
+    }
+
     // Use full headline for image text with automatic line breaks for better wrapping
-    const imageHeadline = addLineBreaks(headline, 40); // Increased for better readability
+    const truncatedHeadline = truncateHeadline(headline, 60);
+
+    const imageHeadline = addLineBreaks(truncatedHeadline, realimgWidth, baseFontSize); // Increased for better readability
+    // const imageHeadline = headline // Increased for better readability
+
 
     const options = {
       src: imageUrl,
@@ -75,30 +112,23 @@ function generateInstagramImage(
       format: "auto" as const,
       quality: "auto" as const,
       fetchFormat: "auto" as const, // Auto-detect source format
-      // overlays: [
-      //   // White main text (auto-wrapping)
-      //   {
-      //     position: {
-      //       gravity: "south" as const,
-      //       y: 5,
-      //       x: 6,
-      //     },
-      //     text: {
-      //       color: "white",
-      //       fontFamily: "Impact",
-      //       fontSize: baseFontSize,
-      //       fontWeight: "600" as const, // Extra bold for better visibility
-      //       border: "1px_solid_red",
-      //       // letterSpacing: 10,
-      //       // lineSpacing: 10,
-      //       // text_align: "left" as const,
-      //       text: imageHeadline,
-      //       // width: textWidth, // Dynamic width based on platform
-      //       crop: "textFit",
-      //       flags: "text_no_trim"
-      //     },
-      //   },
-      // ],
+      dpr: "2.0", // Key for improving clarity
+
+      overlays: [
+        // White main text (auto-wrapping)
+        {
+          position: { gravity: "south" as const, y: 40 },
+          text: {
+            color: "white",
+            fontFamily: "arial",
+            fontSize: baseFontSize,
+            fontWeight: "bold" as const,
+            stroke: "stroke_black",
+            text: imageHeadline,
+            width: baseimgwidth,
+          },
+        },
+      ],
     };
 
     const cloudinaryConfig = {
@@ -168,7 +198,7 @@ export async function GET() {
             const finalBbcUrl = needsEscaping ? encodeURIComponent(cleanBbcUrl) : cleanBbcUrl;
             
             // Generate Instagram image
-            platformImages = generateInstagramImage(finalBbcUrl, headline);
+            platformImages = await generateInstagramImage(finalBbcUrl, headline);
             
             console.log('BBC Input Image URL:', cleanBbcUrl);
             console.log('BBC Final Image URL (escaped or normal):', finalBbcUrl);
