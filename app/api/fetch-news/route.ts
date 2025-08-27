@@ -51,6 +51,16 @@ function truncateHeadline(headline: string, maxLength: number = 70): string {
   return truncated + "...";
 }
 
+
+function getRandomBackgroundColor() {
+  const colors = [
+    'rgb:0A0F1480',
+    'rgb:140A0D80',
+    'rgb:0D0C0A80'
+  ];
+  return colors[Math.floor(Math.random() * colors.length)];
+}
+
 // Function to generate Instagram image with wrapped + scaled text
 async function generateInstagramImage(
   imageUrl: string,
@@ -127,6 +137,17 @@ async function generateInstagramImage(
             text: imageHeadline,
             width: baseimgwidth,
           },
+
+          // These apply to the text layer itself and will appear in the URL
+          effects: [
+            // Semi-transparent black box behind the text (b_rgb:000000CC)
+            // { background: "rgb:00000080" },
+            { background: getRandomBackgroundColor() },
+            { border: `${Math.round(baseFontSize * 0.35)}px_solid_rgb:00000000` },
+            { padding: Math.round(baseFontSize * 0.6) }, // makes box bigger around text
+            // Optional: rounded corners on that box (r_ value)
+            { radius: Math.round(baseFontSize * 0.4) },
+          ],
         },
       ],
     };
