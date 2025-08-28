@@ -56,7 +56,9 @@ function getRandomBackgroundColor() {
   const colors = [
     'rgb:0A0F1480',
     'rgb:140A0D80',
-    'rgb:0D0C0A80'
+    'rgb:0D0C0A80',
+    'rgb:1A0D1180',
+    'rgb:01140080'
   ];
   return colors[Math.floor(Math.random() * colors.length)];
 }
