@@ -5,6 +5,9 @@ import { NewsApiResponse } from '../../types';
 import sizeOf from "image-size";
 import { Buffer } from "buffer";
 import fetch from "node-fetch";
+import fs from 'fs/promises';
+import path from 'path';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const parser = new Parser({
   customFields: {
@@ -12,11 +15,39 @@ const parser = new Parser({
   },
 });
 
+const VARIETY_RSS_ENDPOINTS = [
+  'https://variety.com/v/film/feed/',
+  'https://variety.com/v/tv/feed/',
+  'https://variety.com/v/music/feed/',
+  'https://variety.com/v/awards/feed/',
+  'https://variety.com/v/global/feed/',
+  'https://variety.com/v/theater/feed/',
+  'https://variety.com/v/digital/feed/',
+];
+
+const HEADLINES_FILE_PATH = path.join(__dirname, '..', '..', '..', 'used_headlines.json');
+
+// Function to read used headlines from file
+async function readUsedHeadlines(): Promise<string[]> {
+  try {
+    const data = await fs.readFile(HEADLINES_FILE_PATH, 'utf-8');
+    return JSON.parse(data) as string[];
+  } catch (error) {
+    // If file doesn't exist or is invalid, return empty array
+    return [];
+  }
+}
+
+// Function to append headlines to file
+async function appendUsedHeadlines(headlines: string[]): Promise<void> {
+  const existingHeadlines = await readUsedHeadlines();
+  const updatedHeadlines = [...new Set([...existingHeadlines, ...headlines])]; // Remove duplicates
+  await fs.writeFile(HEADLINES_FILE_PATH, JSON.stringify(updatedHeadlines, null, 2));
+}
+
 // Function to add line breaks at word boundaries for better text wrapping
 function addLineBreaks(text: string, imageWidth: number, fontSize: number): string {
-  // Estimate how many characters can fit per line based on image width and font size
   const charsPerLine = Math.floor(imageWidth / (fontSize * 0.6));
-
   const words = text.split(' ');
   const lines: string[] = [];
   let currentLine = '';
@@ -29,28 +60,20 @@ function addLineBreaks(text: string, imageWidth: number, fontSize: number): stri
       currentLine = word;
     }
   }
-
   if (currentLine) lines.push(currentLine);
-
-  return lines.join('%0A'); // URL-encoded line break
+  return lines.join('%0A');
 }
-
 
 // Function to truncate headline intelligently at word boundaries
 function truncateHeadline(headline: string, maxLength: number = 70): string {
   if (headline.length <= maxLength) return headline;
-  
-  // Try to find a word boundary near the max length
   const truncated = headline.substring(0, maxLength);
   const lastSpaceIndex = truncated.lastIndexOf(' ');
-  
-  if (lastSpaceIndex > maxLength * 0.8) { // If we can find a space in the last 20%
+  if (lastSpaceIndex > maxLength * 0.8) {
     return truncated.substring(0, lastSpaceIndex) + "...";
   }
-  
   return truncated + "...";
 }
-
 
 function getRandomBackgroundColor() {
   const colors = [
@@ -69,15 +92,12 @@ async function generateInstagramImage(
   headline: string
 ): Promise<{ instagram: string }> {
   const platforms = {
-    instagram: { width: 1080, height: 1080, crop: "crop" as const }, // Square
+    instagram: { width: 1080, height: 1080, crop: "crop" as const },
   };
 
-  const results: { instagram: string } = {
-    instagram: "",
-  };
+  const results: { instagram: string } = { instagram: "" };
 
   for (const [platform, platformConfig] of Object.entries(platforms)) {
-
     async function getImageWidth(url: string): Promise<number> {
       const res = await fetch(url);
       const buffer = Buffer.from(await res.arrayBuffer());
@@ -86,20 +106,14 @@ async function generateInstagramImage(
       return width;
     }
 
-    // Default values
-    let baseFontSize = 80; 
+    let baseFontSize = 80;
     let baseimgwidth = 900;
     let realimgWidth = 1080;
 
     try {
-      // Dynamically fetch image width
       const imgWidth = await getImageWidth(imageUrl);
-
-      // Scale font size as ~5% of image width
-      const dynamicSize = Math.round(imgWidth * 0.05); // 5% of width
+      const dynamicSize = Math.round(imgWidth * 0.05);
       const txtbaseimgwidth = Math.round(imgWidth * 0.8);
-
-      // Keep it within safe bounds
       realimgWidth = imgWidth;
       baseimgwidth = txtbaseimgwidth;
       baseFontSize = dynamicSize;
@@ -107,12 +121,8 @@ async function generateInstagramImage(
       console.error("Font size fallback (could not fetch image size):", err);
     }
 
-    // Use full headline for image text with automatic line breaks for better wrapping
     const truncatedHeadline = truncateHeadline(headline, 60);
-
-    const imageHeadline = addLineBreaks(truncatedHeadline, realimgWidth, baseFontSize); // Increased for better readability
-    // const imageHeadline = headline // Increased for better readability
-
+    const imageHeadline = addLineBreaks(truncatedHeadline, realimgWidth, baseFontSize);
 
     const options = {
       src: imageUrl,
@@ -123,11 +133,9 @@ async function generateInstagramImage(
       gravity: "auto:subject" as const,
       format: "auto" as const,
       quality: "auto" as const,
-      fetchFormat: "auto" as const, // Auto-detect source format
-      dpr: "2.0", // Key for improving clarity
-
+      fetchFormat: "auto" as const,
+      dpr: "2.0",
       overlays: [
-        // White main text (auto-wrapping)
         {
           position: { gravity: "south" as const, y: 40 },
           text: {
@@ -139,15 +147,10 @@ async function generateInstagramImage(
             text: imageHeadline,
             width: baseimgwidth,
           },
-
-          // These apply to the text layer itself and will appear in the URL
           effects: [
-            // Semi-transparent black box behind the text (b_rgb:000000CC)
-            // { background: "rgb:00000080" },
             { background: getRandomBackgroundColor() },
             { border: `${Math.round(baseFontSize * 0.35)}px_solid_rgb:00000000` },
-            { padding: Math.round(baseFontSize * 0.6) }, // makes box bigger around text
-            // Optional: rounded corners on that box (r_ value)
+            { padding: Math.round(baseFontSize * 0.6) },
             { radius: Math.round(baseFontSize * 0.4) },
           ],
         },
@@ -160,108 +163,152 @@ async function generateInstagramImage(
       },
     };
 
-    results[platform as keyof typeof results] = getCldImageUrl(
-      options,
-      cloudinaryConfig
-    );
+    results[platform as keyof typeof results] = getCldImageUrl(options, cloudinaryConfig);
   }
 
   return results;
 }
 
+// Function to call Google Gemini API using SDK
+async function callGemini(posts: { headline: string; description: string; imageUrl: string | null; link: string | null }[]): Promise<
+  { originalHeadline: string; newHeadline: string; description: string; imageUrl: string | null; link: string | null }[]
+> {
+  const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
+  console.log('API Key:', apiKey ? 'Set' : 'Undefined'); // Debug log
+  if (!apiKey) throw new Error('Google Gemini API key not configured');
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+  const prompt = `
+    Here is a JSON array of the latest entertainment news items from Variety: ${JSON.stringify(posts)}.
+
+    Select exactly 4 of the most engaging and relevant posts (prioritizing topics like movies, TV, celebrities, music, awards, Hollywood events, and avoiding low-interest items). For each selected post, return the original headline, a new attention-grabbing headline (optimized for social media, concise, and engaging), description, imageUrl, and link. Return only a JSON array of the 4 selected objects, each with the keys: originalHeadline, newHeadline, description, imageUrl, link. Do not include any other text.
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    let content = result.response.text();
+    console.log('Raw Gemini response:', content); // Debug log
+    // Remove markdown code fences and trim whitespace
+    content = content.replace(/```json\n|\n```/g, '').trim();
+    const parsedContent = JSON.parse(content);
+    if (!Array.isArray(parsedContent) || parsedContent.length !== 4) {
+      throw new Error(`Gemini did not return exactly 4 posts, got ${parsedContent.length}`);
+    }
+    return parsedContent;
+  } catch (error) {
+    console.error('Gemini SDK error:', error);
+    throw new Error(`Failed to select posts via Gemini: ${(error as Error).message}`);
+  }
+}
 
 export async function GET() {
   try {
-    const feed = await parser.parseURL('https://variety.com/v/film/feed/');
-    const latestItem = feed.items[0];
-    if (!latestItem) throw new Error('No items found');
+    // Fetch posts from all endpoints
+    const postsPromises = VARIETY_RSS_ENDPOINTS.map(async (url) => {
+      try {
+        const feed = await parser.parseURL(url);
+        const latestItem = feed.items[0];
+        if (!latestItem) return null;
+        return {
+          headline: latestItem.title ?? '',
+          description: latestItem.contentSnippet || (latestItem as any).description || '',
+          imageUrl: latestItem['media:thumbnail']?.$?.url ?? null,
+          link: latestItem.guid ?? null,
+        };
+      } catch (error) {
+        console.error(`Error fetching from ${url}:`, error);
+        return null;
+      }
+    });
 
-    const headline = latestItem.title ?? '';
-    const description = latestItem.contentSnippet || (latestItem as any).description || '';
-    const imageUrl = latestItem['media:thumbnail']?.$?.url ?? null;
-    const link = latestItem.guid ?? null;
+    const posts = (await Promise.all(postsPromises)).filter((post): post is NonNullable<typeof post> => post !== null);
 
-    // const keywords = ['actor', 'movie', 'musician', 'celebrity', 'LA', 'arrested', 'masterpieces', 'charged', 'filming', 'star', 'stars', 'director', 'plays', 'marvel', 'mcu', 'DCU', 'DC', 'spiderman', 'Hollywood'];
-    // const isRelevant = keywords.some(keyword =>
-    //   headline.toLowerCase().includes(keyword) || description.toLowerCase().includes(keyword)
-    // );
-    // if (!isRelevant) {
-    //   return NextResponse.json<NewsApiResponse>({
-    //     success: false,
-    //     message: 'No relevant entertainment news found',
-    //   });
-    // }
+    // Filter out duplicates
+    const usedHeadlines = await readUsedHeadlines();
+    const uniquePosts = posts.filter((post) => !usedHeadlines.includes(post.headline));
 
-    // Create caption with full description truncated to fit Instagram's limit
-    const words = description.split(' ');
-    
-    // Popular hashtags for entertainment news
-    const hashtags = '#Entertainment #News #Celebs #Movies #Hollywood #Film #TV #Celebrity #Showbiz #Trending';
-    
-    // Calculate space needed for link and hashtags
-    const linkSection = link ? `\n\nRead more: ${link}` : '';
-    const hashtagSection = `\n\n${hashtags}`;
-    const reservedSpace = linkSection.length + hashtagSection.length + 10; // +10 for safety
-    
-    // Truncate description to leave space for link and hashtags
-    const maxDescriptionLength = 2200 - reservedSpace; // Instagram caption limit is 2200 characters
-    const truncatedDescription = words.slice(0, Math.floor(maxDescriptionLength / 6)).join(' '); // ~6 chars per word average
-    
-    const captionWithLink = link 
-      ? `${truncatedDescription}...${linkSection}${hashtagSection}` 
-      : `${truncatedDescription}...${hashtagSection}`;
-    
-    const presetCaption = captionWithLink;
-
-    let platformImages: { instagram: string } | null = null;
-    if (imageUrl) {
-          try {
-            const cleanBbcUrl = imageUrl.split('?')[0].replace(/\/$/, '');
-            const needsEscaping = /[?=&#]/.test(cleanBbcUrl);
-            const finalBbcUrl = needsEscaping ? encodeURIComponent(cleanBbcUrl) : cleanBbcUrl;
-            
-            // Generate Instagram image
-            platformImages = await generateInstagramImage(finalBbcUrl, headline);
-            
-            console.log('BBC Input Image URL:', cleanBbcUrl);
-            console.log('BBC Final Image URL (escaped or normal):', finalBbcUrl);
-            console.log('BBC Generated Platform Images:', platformImages);
-            
-            // Test one of the generated URLs to ensure they work
-            const testResponse = await fetch(platformImages.instagram, { method: 'HEAD' });
-            if (!testResponse.ok) {
-              const errorText = await testResponse.text();
-              throw new Error(`BBC URL failed: ${testResponse.status} ${testResponse.statusText} - ${errorText}`);
-            }
-          } catch (bbcError) {
-            console.error('BBC fetch error:', bbcError);
-            // Fallback to placeholder image
-            platformImages = {
-              instagram: 'https://placehold.co/1080x1080?text=Edit+Failed'
-            };
-        }
-    } else {
-      // No image available, use placeholder
-      platformImages = {
-        instagram: 'https://placehold.co/1080x1080?text=No+Image'
-      };
+    if (uniquePosts.length === 0) {
+      return NextResponse.json<NewsApiResponse>(
+        { success: false, message: 'No new entertainment news found after duplicate filtering' },
+        { status: 404 }
+      );
     }
 
-    const postPayload = {
-      instagram: { image_url: platformImages.instagram, caption: presetCaption },
-    };
-    console.log('Simulated post:', JSON.stringify(postPayload, null, 2));
+    // Call Gemini to select 4 posts
+    let selectedPosts: { originalHeadline: string; newHeadline: string; description: string; imageUrl: string | null; link: string | null }[];
+    try {
+      selectedPosts = await callGemini(uniquePosts);
+      if (selectedPosts.length !== 4) {
+        throw new Error(`Gemini did not return exactly 4 posts, got ${selectedPosts.length}`);
+      }
+    } catch (error) {
+      console.error('Gemini error:', error);
+      return NextResponse.json<NewsApiResponse>(
+        { success: false, error: `Failed to select posts via LLM: ${(error as Error).message}` },
+        { status: 500 }
+      );
+    }
+
+    // Process the 4 selected posts
+    const postPayloads = await Promise.all(
+      selectedPosts.map(async (post) => {
+        const { newHeadline, description, imageUrl, link } = post;
+
+        // Create caption
+        const words = description.split(' ');
+        const hashtags = '#Entertainment #News #Celebs #Movies #Hollywood #Film #TV #Celebrity #Showbiz #Trending';
+        const linkSection = link ? `\n\nRead more: ${link}` : '';
+        const hashtagSection = `\n\n${hashtags}`;
+        const reservedSpace = linkSection.length + hashtagSection.length + 10;
+        const maxDescriptionLength = 2200 - reservedSpace;
+        const truncatedDescription = words.slice(0, Math.floor(maxDescriptionLength / 6)).join(' ');
+        const presetCaption = link
+          ? `${truncatedDescription}...${linkSection}${hashtagSection}`
+          : `${truncatedDescription}...${hashtagSection}`;
+
+        // Generate Instagram image
+        let platformImages: { instagram: string } = { instagram: 'https://placehold.co/1080x1080?text=No+Image' };
+        let postPayload = { instagram: { image_url: platformImages.instagram, caption: presetCaption } };
+        if (imageUrl) {
+          try {
+            const cleanUrl = imageUrl.split('?')[0].replace(/\/$/, '');
+            const needsEscaping = /[?=&#]/.test(cleanUrl);
+            const finalUrl = needsEscaping ? encodeURIComponent(cleanUrl) : cleanUrl;
+            platformImages = await generateInstagramImage(finalUrl, newHeadline);
+            postPayload = { instagram: { image_url: platformImages.instagram, caption: presetCaption } };
+            const testResponse = await fetch(platformImages.instagram, { method: 'HEAD' });
+            if (!testResponse.ok) {
+              throw new Error(`Image URL failed: ${testResponse.statusText}`);
+            }
+          } catch (error) {
+            console.error('Image generation error:', error);
+            platformImages = { instagram: 'https://placehold.co/1080x1080?text=Edit+Failed' };
+            postPayload = { instagram: { image_url: platformImages.instagram, caption: presetCaption } };
+          }
+        }
+
+        return {
+          headline: newHeadline,
+          description: description.substring(0, 100),
+          originalImage: imageUrl,
+          caption: presetCaption,
+          editedImage: platformImages.instagram,
+          platformImages,
+          link,
+          originalHeadline: post.originalHeadline,
+          postPayload,
+        };
+      })
+    );
+
+    // Append original headlines to file
+    await appendUsedHeadlines(selectedPosts.map((post) => post.originalHeadline));
 
     return NextResponse.json<NewsApiResponse>({
       success: true,
-      headline,
-      description: description.substring(0, 100),
-      originalImage: imageUrl,
-      caption: presetCaption,
-      editedImage: platformImages.instagram, // Keep for backward compatibility
-      platformImages, // Add new field for all platform images
-      link,
-      postPayload,
+      posts: postPayloads,
     });
   } catch (error) {
     return NextResponse.json<NewsApiResponse>(

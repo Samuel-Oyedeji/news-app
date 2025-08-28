@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@cloudinary-util/url-loader": "^6.0.0",
+    "@google/generative-ai": "^0.24.1",
     "cloudinary": "^2.7.0",
     "file-type": "^21.0.0",
     "image-size": "^2.0.2",
