@@ -25,24 +25,60 @@ const VARIETY_RSS_ENDPOINTS = [
   'https://variety.com/v/digital/feed/',
 ];
 
-const HEADLINES_FILE_PATH = path.join(__dirname, '..', '..', '..', 'used_headlines.json');
+// Set file path to app/data/
+const HEADLINES_FILE_PATH = path.resolve(process.cwd(), 'app', 'data', 'used_headlines.json');
+
+// Function to ensure file and directory exist
+async function ensureFileExists(filePath: string): Promise<void> {
+  try {
+    await fs.access(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      const dirPath = path.dirname(filePath);
+      console.log('Creating directory if not exists:', dirPath);
+      await fs.mkdir(dirPath, { recursive: true });
+      console.log('Creating used_headlines.json at:', filePath);
+      await fs.writeFile(filePath, JSON.stringify([], null, 2));
+    } else {
+      throw error;
+    }
+  }
+}
 
 // Function to read used headlines from file
 async function readUsedHeadlines(): Promise<string[]> {
   try {
+    console.log('Reading from:', HEADLINES_FILE_PATH); // Debug log
+    await ensureFileExists(HEADLINES_FILE_PATH);
     const data = await fs.readFile(HEADLINES_FILE_PATH, 'utf-8');
-    return JSON.parse(data) as string[];
+    const parsed = JSON.parse(data);
+    if (!Array.isArray(parsed)) {
+      console.warn('Invalid used_headlines.json format, initializing empty array');
+      return [];
+    }
+    return parsed;
   } catch (error) {
-    // If file doesn't exist or is invalid, return empty array
-    return [];
+    console.error('Error reading used_headlines.json:', error);
+    throw new Error(`Failed to read headlines: ${(error as Error).message}`);
   }
 }
 
 // Function to append headlines to file
 async function appendUsedHeadlines(headlines: string[]): Promise<void> {
-  const existingHeadlines = await readUsedHeadlines();
-  const updatedHeadlines = [...new Set([...existingHeadlines, ...headlines])]; // Remove duplicates
-  await fs.writeFile(HEADLINES_FILE_PATH, JSON.stringify(updatedHeadlines, null, 2));
+  try {
+    console.log('Appending headlines:', headlines); // Debug log
+    if (!headlines || headlines.length === 0) {
+      console.warn('No headlines to append');
+      return;
+    }
+    const existingHeadlines = await readUsedHeadlines();
+    const updatedHeadlines = [...new Set([...existingHeadlines, ...headlines])]; // Remove duplicates
+    await fs.writeFile(HEADLINES_FILE_PATH, JSON.stringify(updatedHeadlines, null, 2));
+    console.log('Successfully wrote to used_headlines.json:', updatedHeadlines);
+  } catch (error) {
+    console.error('Error appending to used_headlines.json:', error);
+    throw new Error(`Failed to append headlines: ${(error as Error).message}`);
+  }
 }
 
 // Function to add line breaks at word boundaries for better text wrapping
@@ -75,6 +111,12 @@ function truncateHeadline(headline: string, maxLength: number = 70): string {
   return truncated + "...";
 }
 
+// Function to sanitize headline by removing emojis and special characters
+function sanitizeHeadline(headline: string): string {
+  // Remove emojis (Unicode characters outside basic ASCII)
+  return headline.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+}
+
 function getRandomBackgroundColor() {
   const colors = [
     'rgb:0A0F1480',
@@ -84,6 +126,16 @@ function getRandomBackgroundColor() {
     'rgb:01140080'
   ];
   return colors[Math.floor(Math.random() * colors.length)];
+}
+
+// Function to validate URL
+function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Function to generate Instagram image with wrapped + scaled text
@@ -96,6 +148,10 @@ async function generateInstagramImage(
   };
 
   const results: { instagram: string } = { instagram: "" };
+
+  // Sanitize headline to remove emojis
+  const sanitizedHeadline = sanitizeHeadline(headline);
+  console.log('Sanitized headline:', sanitizedHeadline); // Debug log
 
   for (const [platform, platformConfig] of Object.entries(platforms)) {
     async function getImageWidth(url: string): Promise<number> {
@@ -117,11 +173,12 @@ async function generateInstagramImage(
       realimgWidth = imgWidth;
       baseimgwidth = txtbaseimgwidth;
       baseFontSize = dynamicSize;
+      console.log('Calculated font size:', baseFontSize); // Debug log
     } catch (err) {
       console.error("Font size fallback (could not fetch image size):", err);
     }
 
-    const truncatedHeadline = truncateHeadline(headline, 60);
+    const truncatedHeadline = truncateHeadline(sanitizedHeadline, 60);
     const imageHeadline = addLineBreaks(truncatedHeadline, realimgWidth, baseFontSize);
 
     const options = {
@@ -169,7 +226,6 @@ async function generateInstagramImage(
   return results;
 }
 
-// Function to call Google Gemini API using SDK
 async function callGemini(posts: { headline: string; description: string; imageUrl: string | null; link: string | null }[]): Promise<
   { originalHeadline: string; newHeadline: string; description: string; imageUrl: string | null; link: string | null }[]
 > {
@@ -183,7 +239,7 @@ async function callGemini(posts: { headline: string; description: string; imageU
   const prompt = `
     Here is a JSON array of the latest entertainment news items from Variety: ${JSON.stringify(posts)}.
 
-    Select exactly 4 of the most engaging and relevant posts (prioritizing topics like movies, TV, celebrities, music, awards, Hollywood events, and avoiding low-interest items). For each selected post, return the original headline, a new attention-grabbing headline (optimized for social media, concise, and engaging), description, imageUrl, and link. Return only a JSON array of the 4 selected objects, each with the keys: originalHeadline, newHeadline, description, imageUrl, link. Do not include any other text.
+    Select up to 6 of the most engaging and relevant posts (prioritizing topics like movies, TV, celebrities, music, awards, Hollywood events, and avoiding low-interest items). For each selected post, return the original headline, a new attention-grabbing headline (optimized for social media, concise, and engaging), description, imageUrl, and link. Return only a JSON array of the selected objects, each with the keys: originalHeadline, newHeadline, description, imageUrl, link. Do not include any other text.
   `;
 
   try {
@@ -193,8 +249,8 @@ async function callGemini(posts: { headline: string; description: string; imageU
     // Remove markdown code fences and trim whitespace
     content = content.replace(/```json\n|\n```/g, '').trim();
     const parsedContent = JSON.parse(content);
-    if (!Array.isArray(parsedContent) || parsedContent.length !== 4) {
-      throw new Error(`Gemini did not return exactly 4 posts, got ${parsedContent.length}`);
+    if (!Array.isArray(parsedContent)) {
+      throw new Error('Gemini did not return an array of posts');
     }
     return parsedContent;
   } catch (error) {
@@ -236,12 +292,12 @@ export async function GET() {
       );
     }
 
-    // Call Gemini to select 4 posts
+    // Call Gemini to select up to 6 posts
     let selectedPosts: { originalHeadline: string; newHeadline: string; description: string; imageUrl: string | null; link: string | null }[];
     try {
       selectedPosts = await callGemini(uniquePosts);
-      if (selectedPosts.length !== 4) {
-        throw new Error(`Gemini did not return exactly 4 posts, got ${selectedPosts.length}`);
+      if (selectedPosts.length === 0) {
+        throw new Error('Gemini returned no posts');
       }
     } catch (error) {
       console.error('Gemini error:', error);
@@ -251,45 +307,62 @@ export async function GET() {
       );
     }
 
-    // Process the 4 selected posts
-    const postPayloads = await Promise.all(
-      selectedPosts.map(async (post) => {
-        const { newHeadline, description, imageUrl, link } = post;
+    // Process posts and filter for valid Cloudinary URLs
+    const validPostPayloads = [];
+    const processedHeadlines = new Set<string>();
 
-        // Create caption
-        const words = description.split(' ');
-        const hashtags = '#Entertainment #News #Celebs #Movies #Hollywood #Film #TV #Celebrity #Showbiz #Trending';
-        const linkSection = link ? `\n\nRead more: ${link}` : '';
-        const hashtagSection = `\n\n${hashtags}`;
-        const reservedSpace = linkSection.length + hashtagSection.length + 10;
-        const maxDescriptionLength = 2200 - reservedSpace;
-        const truncatedDescription = words.slice(0, Math.floor(maxDescriptionLength / 6)).join(' ');
-        const presetCaption = link
-          ? `${truncatedDescription}...${linkSection}${hashtagSection}`
-          : `${truncatedDescription}...${hashtagSection}`;
+    for (const post of selectedPosts) {
+      if (validPostPayloads.length >= 3) break; // Stop once we have 3 valid posts
 
-        // Generate Instagram image
-        let platformImages: { instagram: string } = { instagram: 'https://placehold.co/1080x1080?text=No+Image' };
-        let postPayload = { instagram: { image_url: platformImages.instagram, caption: presetCaption } };
-        if (imageUrl) {
-          try {
-            const cleanUrl = imageUrl.split('?')[0].replace(/\/$/, '');
-            const needsEscaping = /[?=&#]/.test(cleanUrl);
-            const finalUrl = needsEscaping ? encodeURIComponent(cleanUrl) : cleanUrl;
-            platformImages = await generateInstagramImage(finalUrl, newHeadline);
+      const { newHeadline, description, imageUrl, link, originalHeadline } = post;
+
+      // Skip if headline was already processed
+      if (processedHeadlines.has(originalHeadline)) continue;
+      processedHeadlines.add(originalHeadline);
+
+      // Create caption
+      const words = description.split(' ');
+      const hashtags = '#Entertainment #News #Celebs #Movies #Hollywood #Film #TV #Celebrity #Showbiz #Trending';
+      const linkSection = link ? `\n\nRead more: ${link}` : '';
+      const hashtagSection = `\n\n${hashtags}`;
+      const reservedSpace = linkSection.length + hashtagSection.length + 10;
+      const maxDescriptionLength = 2200 - reservedSpace;
+      const truncatedDescription = words.slice(0, Math.floor(maxDescriptionLength / 6)).join(' ');
+      const presetCaption = link
+        ? `${truncatedDescription}...${linkSection}${hashtagSection}`
+        : `${truncatedDescription}...${hashtagSection}`;
+
+      // Generate Instagram image
+      let platformImages: { instagram: string } = { instagram: 'https://placehold.co/1080x1080?text=No+Image' };
+      let postPayload = { instagram: { image_url: platformImages.instagram, caption: presetCaption } };
+      let isValidImage = false;
+
+      if (imageUrl && isValidUrl(imageUrl)) {
+        try {
+          const cleanUrl = imageUrl.split('?')[0].replace(/\/$/, '');
+          const needsEscaping = /[?=&#]/.test(cleanUrl);
+          const finalUrl = needsEscaping ? encodeURIComponent(cleanUrl) : cleanUrl;
+          console.log('Generating image for URL:', imageUrl); // Debug log
+          console.log('Cleaned URL:', cleanUrl); // Debug log
+          console.log('Final URL:', finalUrl); // Debug log
+          platformImages = await generateInstagramImage(finalUrl, newHeadline);
+          console.log('Generated Cloudinary URL:', platformImages.instagram); // Debug log
+          const testResponse = await fetch(platformImages.instagram, { method: 'HEAD' });
+          if (testResponse.ok) {
             postPayload = { instagram: { image_url: platformImages.instagram, caption: presetCaption } };
-            const testResponse = await fetch(platformImages.instagram, { method: 'HEAD' });
-            if (!testResponse.ok) {
-              throw new Error(`Image URL failed: ${testResponse.statusText}`);
-            }
-          } catch (error) {
-            console.error('Image generation error:', error);
-            platformImages = { instagram: 'https://placehold.co/1080x1080?text=Edit+Failed' };
-            postPayload = { instagram: { image_url: platformImages.instagram, caption: presetCaption } };
+            isValidImage = true;
+          } else {
+            console.warn(`Skipping post due to invalid Cloudinary URL: ${testResponse.statusText} (URL: ${platformImages.instagram})`);
           }
+        } catch (error) {
+          console.error('Image generation error for URL:', imageUrl, error);
         }
+      } else {
+        console.warn('Invalid or missing image URL:', imageUrl);
+      }
 
-        return {
+      if (isValidImage) {
+        validPostPayloads.push({
           headline: newHeadline,
           description: description.substring(0, 100),
           originalImage: imageUrl,
@@ -297,18 +370,34 @@ export async function GET() {
           editedImage: platformImages.instagram,
           platformImages,
           link,
-          originalHeadline: post.originalHeadline,
+          originalHeadline,
           postPayload,
-        };
-      })
-    );
+        });
+      }
+    }
+
+    // Check if we have exactly 3 valid posts
+    if (validPostPayloads.length < 3) {
+      return NextResponse.json<NewsApiResponse>(
+        { success: false, message: `Could not find 3 posts with valid image URLs, found ${validPostPayloads.length}` },
+        { status: 404 }
+      );
+    }
+
+    // Take the first 3 valid posts
+    const finalPostPayloads = validPostPayloads.slice(0, 3);
 
     // Append original headlines to file
-    await appendUsedHeadlines(selectedPosts.map((post) => post.originalHeadline));
+    try {
+      await appendUsedHeadlines(finalPostPayloads.map((post) => post.originalHeadline));
+    } catch (error) {
+      console.error('Failed to append headlines, continuing with response:', error);
+      // Continue to return response even if headline append fails
+    }
 
     return NextResponse.json<NewsApiResponse>({
       success: true,
-      posts: postPayloads,
+      posts: finalPostPayloads,
     });
   } catch (error) {
     return NextResponse.json<NewsApiResponse>(
