@@ -234,7 +234,7 @@ async function callGemini(posts: { headline: string; description: string; imageU
   if (!apiKey) throw new Error('Google Gemini API key not configured');
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const prompt = `
     Here is a JSON array of the latest entertainment news items from Variety: ${JSON.stringify(posts)}.
