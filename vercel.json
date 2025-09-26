@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/fetch-and-post",
-      "schedule": "0 * * * *"
-    }
-  ]
-}
