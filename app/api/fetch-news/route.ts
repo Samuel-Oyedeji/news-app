@@ -5,9 +5,8 @@ import { NewsApiResponse } from '../../types';
 import sizeOf from "image-size";
 import { Buffer } from "buffer";
 import fetch from "node-fetch";
-import fs from 'fs/promises';
-import path from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { get } from '@vercel/edge-config';
 
 const parser = new Parser({
   customFields: {
@@ -25,59 +24,69 @@ const VARIETY_RSS_ENDPOINTS = [
   'https://variety.com/v/digital/feed/',
 ];
 
-// Set file path to app/data/
-const HEADLINES_FILE_PATH = path.resolve(process.cwd(), 'app', 'data', 'used_headlines.json');
+// In-memory cache for recent headlines (resets on function restart)
+let recentHeadlinesCache: { headlines: string[]; timestamp: number } = {
+  headlines: [],
+  timestamp: 0
+};
 
-// Function to ensure file and directory exist
-async function ensureFileExists(filePath: string): Promise<void> {
-  try {
-    await fs.access(filePath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      const dirPath = path.dirname(filePath);
-      console.log('Creating directory if not exists:', dirPath);
-      await fs.mkdir(dirPath, { recursive: true });
-      console.log('Creating used_headlines.json at:', filePath);
-      await fs.writeFile(filePath, JSON.stringify([], null, 2));
-    } else {
-      throw error;
-    }
+// Cache duration: 1 hour (3600000 ms)
+const CACHE_DURATION = 60 * 60 * 1000;
+
+// Function to get recent headlines from cache or Edge Config
+async function getRecentHeadlines(): Promise<string[]> {
+  const now = Date.now();
+  
+  // Check if cache is still valid
+  if (now - recentHeadlinesCache.timestamp < CACHE_DURATION && recentHeadlinesCache.headlines.length > 0) {
+    console.log('Using cached headlines:', recentHeadlinesCache.headlines.length, 'items');
+    return recentHeadlinesCache.headlines;
   }
+  
+  // Try to get headlines from Edge Config (if configured)
+  try {
+    console.log('Reading recent headlines from Edge Config');
+    const headlines = await get<string[]>('recent_headlines');
+    if (Array.isArray(headlines)) {
+      recentHeadlinesCache = {
+        headlines,
+        timestamp: now
+      };
+      console.log('Retrieved headlines from Edge Config:', headlines.length, 'items');
+      return headlines;
+    }
+  } catch (error) {
+    console.log('Edge Config not available or not configured, using empty array');
+  }
+  
+  // Return empty array if no cache or Edge Config available
+  recentHeadlinesCache = {
+    headlines: [],
+    timestamp: now
+  };
+  return [];
 }
 
-// Function to read used headlines from file
-async function readUsedHeadlines(): Promise<string[]> {
+// Function to update recent headlines cache
+function updateRecentHeadlinesCache(newHeadlines: string[]): void {
   try {
-    console.log('Reading from:', HEADLINES_FILE_PATH); // Debug log
-    await ensureFileExists(HEADLINES_FILE_PATH);
-    const data = await fs.readFile(HEADLINES_FILE_PATH, 'utf-8');
-    const parsed = JSON.parse(data);
-    if (!Array.isArray(parsed)) {
-      console.warn('Invalid used_headlines.json format, initializing empty array');
-      return [];
-    }
-    return parsed;
-  } catch (error) {
-    console.error('Error reading used_headlines.json:', error);
-    throw new Error(`Failed to read headlines: ${(error as Error).message}`);
-  }
-}
-
-// Function to append headlines to file
-async function appendUsedHeadlines(headlines: string[]): Promise<void> {
-  try {
-    console.log('Appending headlines:', headlines); // Debug log
-    if (!headlines || headlines.length === 0) {
-      console.warn('No headlines to append');
+    console.log('Updating recent headlines cache:', newHeadlines);
+    if (!newHeadlines || newHeadlines.length === 0) {
+      console.warn('No headlines to cache');
       return;
     }
-    const existingHeadlines = await readUsedHeadlines();
-    const updatedHeadlines = [...new Set([...existingHeadlines, ...headlines])]; // Remove duplicates
-    await fs.writeFile(HEADLINES_FILE_PATH, JSON.stringify(updatedHeadlines, null, 2));
-    console.log('Successfully wrote to used_headlines.json:', updatedHeadlines);
+    
+    const existingHeadlines = recentHeadlinesCache.headlines;
+    const updatedHeadlines = [...new Set([...existingHeadlines, ...newHeadlines])]; // Remove duplicates
+    
+    recentHeadlinesCache = {
+      headlines: updatedHeadlines,
+      timestamp: Date.now()
+    };
+    
+    console.log('Successfully updated headlines cache:', updatedHeadlines.length, 'total items');
   } catch (error) {
-    console.error('Error appending to used_headlines.json:', error);
-    throw new Error(`Failed to append headlines: ${(error as Error).message}`);
+    console.error('Error updating headlines cache:', error);
   }
 }
 
@@ -281,9 +290,9 @@ export async function GET() {
 
     const posts = (await Promise.all(postsPromises)).filter((post): post is NonNullable<typeof post> => post !== null);
 
-    // Filter out duplicates
-    const usedHeadlines = await readUsedHeadlines();
-    const uniquePosts = posts.filter((post) => !usedHeadlines.includes(post.headline));
+    // Filter out duplicates using recent headlines cache
+    const recentHeadlines = await getRecentHeadlines();
+    const uniquePosts = posts.filter((post) => !recentHeadlines.includes(post.headline));
 
     if (uniquePosts.length === 0) {
       return NextResponse.json<NewsApiResponse>(
@@ -387,12 +396,12 @@ export async function GET() {
     // Take the first 3 valid posts
     const finalPostPayloads = validPostPayloads.slice(0, 3);
 
-    // Append original headlines to file
+    // Update recent headlines cache
     try {
-      await appendUsedHeadlines(finalPostPayloads.map((post) => post.originalHeadline));
+      updateRecentHeadlinesCache(finalPostPayloads.map((post) => post.originalHeadline));
     } catch (error) {
-      console.error('Failed to append headlines, continuing with response:', error);
-      // Continue to return response even if headline append fails
+      console.error('Failed to update headlines cache, continuing with response:', error);
+      // Continue to return response even if cache update fails
     }
 
     return NextResponse.json<NewsApiResponse>({

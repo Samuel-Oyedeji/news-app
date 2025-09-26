@@ -11,9 +11,14 @@
   "dependencies": {
     "@cloudinary-util/url-loader": "^6.0.0",
     "@google/generative-ai": "^0.24.1",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@vercel/edge-config": "^1.4.0",
+    "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.7.0",
+    "clsx": "^2.1.1",
     "file-type": "^21.0.0",
     "image-size": "^2.0.2",
+    "lucide-react": "^0.544.0",
     "next": "15.5.0",
     "next-cloudinary": "^6.16.0",
     "node-fetch": "^3.3.2",
@@ -21,15 +26,19 @@
     "react-dom": "19.1.0",
     "rss-parser": "^3.13.0",
     "sharp": "^0.34.3",
+    "tailwind-merge": "^3.3.1",
     "twitter-api-v2": "^1.25.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
-    "@types/node": "^20.19.11",
+    "@types/node": "^20.19.17",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.21",
     "eslint": "^9",
     "eslint-config-next": "15.5.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.0",
     "typescript": "^5"
   }
 }
