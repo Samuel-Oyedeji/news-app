@@ -269,8 +269,7 @@ export async function GET() {
         if (!latestItem) return null;
         return {
           headline: latestItem.title ?? '',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          description: latestItem.contentSnippet || (latestItem as any).description || '',
+          description: latestItem.contentSnippet || (latestItem as { description?: string }).description || '',
           imageUrl: latestItem['media:thumbnail']?.$?.url ?? null,
           link: latestItem.guid ?? null,
         };
