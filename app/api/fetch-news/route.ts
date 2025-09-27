@@ -4,7 +4,7 @@ import { NewsApiResponse } from '../../types';
 import { Buffer } from "buffer";
 import fetch from "node-fetch";
 import { GoogleGenerativeAI } from '@google/generative-ai';
-// import { Redis } from '@upstash/redis';
+import { Redis } from '@upstash/redis';
 import sharp from 'sharp';
 import { put } from '@vercel/blob';
 
@@ -24,7 +24,7 @@ const VARIETY_RSS_ENDPOINTS = [
   'https://variety.com/v/digital/feed/',
 ];
 
-/*
+
 // Initialize Upstash Redis client
 const redis = new Redis({
   url: process.env.KV_REST_API_URL!,
@@ -70,7 +70,7 @@ async function appendUsedHeadlines(headlines: string[]): Promise<void> {
     console.warn('Continuing without storing headlines due to Redis error');
   }
 }
-*/
+  
 
 // Function to add line breaks at word boundaries for better text wrapping
 function addLineBreaks(text: string, imageWidth: number, fontSize: number): string {
@@ -165,6 +165,8 @@ async function generateInstagramImage(
           <style>
             .title { 
               fill: white; 
+              stroke: black;
+              stroke-width: 3px;
               font-size: 60px; 
               font-family: Arial, Helvetica, sans-serif; 
               font-weight: bold; 
@@ -173,12 +175,12 @@ async function generateInstagramImage(
             }
           </style>
         </defs>
-        <text x="50%" y="85%" class="title">${svgText}</text>
+        <text x="50%" y="80%" class="title">${svgText}</text>
       </svg>
     `;
 
     const imageWithText = await sharp(Buffer.from(imageBuffer))
-      .resize(width, height, { fit: 'cover', position: 'entropy' })
+      .resize(width, height, { fit: 'cover', position: 'center' })
       .composite([{
         input: Buffer.from(svg),
         gravity: 'south',
@@ -372,7 +374,7 @@ export async function GET() {
     const finalPostPayloads = validPostPayloads;
     console.log(`Successfully processed ${finalPostPayloads.length} valid posts for posting`);
 
-    /*
+    
     // Append original headlines to Redis
     try {
       await appendUsedHeadlines(finalPostPayloads.map((post) => post.originalHeadline));
@@ -380,7 +382,7 @@ export async function GET() {
       console.error('Failed to append headlines, continuing with response:', error);
       // Continue to return response even if headline append fails
     }
-    */
+    
 
     return NextResponse.json<NewsApiResponse>({
       success: true,
