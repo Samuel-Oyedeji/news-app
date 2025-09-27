@@ -133,7 +133,7 @@ async function generateInstagramImage(
   headline: string
 ): Promise<{ instagram: string }> {
   const platforms = {
-    instagram: { width: 1080, height: 1080, crop: "crop" as const },
+    instagram: { width: 1080, height: 1080, crop: "fill" as const },
   };
 
   const results: { instagram: string } = { instagram: "" };
@@ -143,32 +143,13 @@ async function generateInstagramImage(
   console.log('Sanitized headline:', sanitizedHeadline); // Debug log
 
   for (const [platform, platformConfig] of Object.entries(platforms)) {
-    async function getImageWidth(url: string): Promise<number> {
-      const res = await fetch(url);
-      const buffer = Buffer.from(await res.arrayBuffer());
-      const { width } = sizeOf(buffer);
-      if (!width) throw new Error("Could not determine image width");
-      return width;
-    }
-
-    let baseFontSize = 80;
-    let baseimgwidth = 900;
-    let realimgWidth = 1080;
-
-    try {
-      const imgWidth = await getImageWidth(imageUrl);
-      const dynamicSize = Math.round(imgWidth * 0.05);
-      const txtbaseimgwidth = Math.round(imgWidth * 0.8);
-      realimgWidth = imgWidth;
-      baseimgwidth = txtbaseimgwidth;
-      baseFontSize = dynamicSize;
-      console.log('Calculated font size:', baseFontSize); // Debug log
-    } catch (err) {
-      console.error("Font size fallback (could not fetch image size):", err);
-    }
+    // Fixed Instagram dimensions - no need for dynamic sizing
+    const baseFontSize = 60; // Fixed font size for Instagram format
+    const baseimgwidth = 900; // Fixed text width for Instagram format
+    const realimgWidth = 1080; // Instagram width
 
     const truncatedHeadline = truncateHeadline(sanitizedHeadline, 60);
-    const imageHeadline = addLineBreaks(truncatedHeadline, realimgWidth, baseFontSize);
+    const imageHeadline = addLineBreaks(truncatedHeadline, 1080, 60);
 
     const options = {
       src: imageUrl,
@@ -186,18 +167,18 @@ async function generateInstagramImage(
           position: { gravity: "south" as const, y: 40 },
           text: {
             color: "white",
-            fontFamily: "arial",
-            fontSize: baseFontSize,
+            fontFamily: "montserrat",
+            fontSize: 60,
             fontWeight: "bold" as const,
             stroke: "stroke_black",
             text: imageHeadline,
-            width: baseimgwidth,
+            width: 900,
           },
           effects: [
             { background: getRandomBackgroundColor() },
-            { border: `${Math.round(baseFontSize * 0.35)}px_solid_rgb:00000000` },
-            { padding: Math.round(baseFontSize * 0.6) },
-            { radius: Math.round(baseFontSize * 0.4) },
+            { border: "21px_solid_rgb:00000000" }, // Fixed border based on 60px font size
+            { padding: 36 }, // Fixed padding based on 60px font size
+            { radius: 0 }, // Sharp corners - no border radius
           ],
         },
       ],
