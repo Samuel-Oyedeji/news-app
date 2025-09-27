@@ -207,9 +207,9 @@ async function callGemini(posts: { headline: string; description: string; imageU
   const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const prompt = `
-    Here is a JSON array of the latest entertainment news items from Variety: ${JSON.stringify(posts)}.
+    Here is a JSON array of entertainment news items from Variety: ${JSON.stringify(posts)}.
 
-    Select up to 6 of the most engaging and relevant posts (prioritizing topics like movies, TV, celebrities, music, awards, Hollywood events, and avoiding low-interest items). For each selected post, return the original headline, a new attention-grabbing headline (optimized for social media, concise, and engaging), description, imageUrl, and link. Return only a JSON array of the selected objects, each with the keys: originalHeadline, newHeadline, description, imageUrl, link. Do not include any other text.
+    Select exactly 3 of the most engaging and relevant posts (prioritizing topics like movies, TV, celebrities, music, awards, Hollywood events, and avoiding low-interest items). For each selected post, return the original headline, a new attention-grabbing headline (optimized for social media, concise, and engaging), description, imageUrl, and link. Return only a JSON array of exactly 3 objects, each with the keys: originalHeadline, newHeadline, description, imageUrl, link. Do not include any other text.
   `;
 
   try {
@@ -231,25 +231,28 @@ async function callGemini(posts: { headline: string; description: string; imageU
 
 export async function GET() {
   try {
-    // Fetch posts from all endpoints
+    // Fetch posts from all endpoints - get multiple posts per feed for better randomization
     const postsPromises = VARIETY_RSS_ENDPOINTS.map(async (url) => {
       try {
         const feed = await parser.parseURL(url);
-        const latestItem = feed.items[0];
-        if (!latestItem) return null;
-        return {
-          headline: latestItem.title ?? '',
-          description: latestItem.contentSnippet || (latestItem as { description?: string }).description || '',
-          imageUrl: latestItem['media:thumbnail']?.$?.url ?? null,
-          link: latestItem.guid ?? null,
-        };
+        // Fetch up to 8 items per feed for better variety
+        const items = feed.items?.slice(0, 8) || [];
+        if (items.length === 0) return [];
+        
+        return items.map(item => ({
+          headline: item.title ?? '',
+          description: item.contentSnippet || (item as { description?: string }).description || '',
+          imageUrl: item['media:thumbnail']?.$?.url ?? null,
+          link: item.guid ?? null,
+        }));
       } catch (error) {
         console.error(`Error fetching from ${url}:`, error);
-        return null;
+        return [];
       }
     });
 
-    const posts = (await Promise.all(postsPromises)).filter((post): post is NonNullable<typeof post> => post !== null);
+    const postsArrays = await Promise.all(postsPromises);
+    const posts = postsArrays.flat().filter((post): post is NonNullable<typeof post> => post !== null);
 
     // Filter out duplicates using Redis storage
     const usedHeadlines = await readUsedHeadlines();
@@ -262,10 +265,20 @@ export async function GET() {
       );
     }
 
-    // Call Gemini to select up to 6 posts
+    // Shuffle posts for better randomization before sending to Gemini
+    const shuffledPosts = uniquePosts.sort(() => Math.random() - 0.5);
+    
+    // Pre-filter posts to reduce Gemini load - prioritize posts with images and good descriptions
+    const qualityPosts = shuffledPosts
+      .filter(post => post.imageUrl && post.description && post.description.length > 50)
+      .slice(0, 20); // Limit to top 20 posts for Gemini processing
+    
+    console.log(`Found ${shuffledPosts.length} unique posts, filtered to ${qualityPosts.length} quality posts for Gemini`);
+
+    // Call Gemini to select exactly 3 posts
     let selectedPosts: { originalHeadline: string; newHeadline: string; description: string; imageUrl: string | null; link: string | null }[];
     try {
-      selectedPosts = await callGemini(uniquePosts);
+      selectedPosts = await callGemini(qualityPosts);
       if (selectedPosts.length === 0) {
         throw new Error('Gemini returned no posts');
       }
