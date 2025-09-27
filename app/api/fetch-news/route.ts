@@ -258,9 +258,9 @@ export async function GET() {
     const posts = postsArrays.flat().filter((post): post is NonNullable<typeof post> => post !== null);
 
     // Filter out duplicates using Redis storage
-    // const usedHeadlines = await readUsedHeadlines();
-    // const uniquePosts = posts.filter((post) => !usedHeadlines.includes(post.headline));
-    const uniquePosts = posts;
+    const usedHeadlines = await readUsedHeadlines();
+    const uniquePosts = posts.filter((post) => !usedHeadlines.includes(post.headline));
+    // const uniquePosts = posts;
 
     if (uniquePosts.length === 0) {
       return NextResponse.json<NewsApiResponse>(
