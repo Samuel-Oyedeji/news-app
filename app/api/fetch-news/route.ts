@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import Parser from 'rss-parser';
-import { getCldImageUrl } from 'next-cloudinary';
 import { NewsApiResponse } from '../../types';
-import sizeOf from "image-size";
 import { Buffer } from "buffer";
 import fetch from "node-fetch";
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Redis } from '@upstash/redis';
+import sharp from 'sharp';
+import { put } from '@vercel/blob';
 
 const parser = new Parser({
   customFields: {
@@ -23,6 +23,7 @@ const VARIETY_RSS_ENDPOINTS = [
   'https://variety.com/v/theater/feed/',
   'https://variety.com/v/digital/feed/',
 ];
+
 
 // Initialize Upstash Redis client
 const redis = new Redis({
@@ -69,6 +70,7 @@ async function appendUsedHeadlines(headlines: string[]): Promise<void> {
     console.warn('Continuing without storing headlines due to Redis error');
   }
 }
+  
 
 // Function to add line breaks at word boundaries for better text wrapping
 function addLineBreaks(text: string, imageWidth: number, fontSize: number): string {
@@ -86,7 +88,7 @@ function addLineBreaks(text: string, imageWidth: number, fontSize: number): stri
     }
   }
   if (currentLine) lines.push(currentLine);
-  return lines.join('%0A');
+  return lines.join('\n');
 }
 
 // Function to truncate headline intelligently at word boundaries
@@ -105,7 +107,7 @@ function sanitizeHeadline(headline: string): string {
   // Remove emojis (Unicode characters outside basic ASCII)
   let sanitized = headline.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
   
-  // Remove or replace problematic characters for Cloudinary text overlays
+  // Remove or replace problematic characters
   sanitized = sanitized
     .replace(/['"]/g, '') // Remove quotes
     .replace(/[&]/g, 'and') // Replace & with 'and'
@@ -117,11 +119,11 @@ function sanitizeHeadline(headline: string): string {
 
 function getRandomBackgroundColor() {
   const colors = [
-    'rgb:0A0F1480',
-    'rgb:140A0D80',
-    'rgb:0D0C0A80',
-    'rgb:1A0D1180',
-    'rgb:01140080'
+    'rgba(10, 15, 20, 0.8)',
+    'rgba(20, 10, 13, 0.8)',
+    'rgba(13, 12, 10, 0.8)',
+    'rgba(26, 13, 17, 0.8)',
+    'rgba(1, 20, 0, 0.8)'
   ];
   return colors[Math.floor(Math.random() * colors.length)];
 }
@@ -136,86 +138,66 @@ function isValidUrl(url: string): boolean {
   }
 }
 
-// Function to generate Instagram image with wrapped + scaled text
 async function generateInstagramImage(
   imageUrl: string,
   headline: string
 ): Promise<{ instagram: string }> {
-  const platforms = {
-    instagram: { width: 1080, height: 1080, crop: "fill" as const },
-  };
-
-  const results: { instagram: string } = { instagram: "" };
-
-  // Sanitize headline to remove emojis
-  const sanitizedHeadline = sanitizeHeadline(headline);
-  console.log('Original headline:', headline);
-  console.log('Sanitized headline:', sanitizedHeadline);
-
-  for (const [platform, platformConfig] of Object.entries(platforms)) {
-    // Fixed Instagram dimensions - no need for dynamic sizing
-    const baseFontSize = 60; // Fixed font size for Instagram format
-    const baseimgwidth = 900; // Fixed text width for Instagram format
-    const realimgWidth = 1080; // Instagram width
-
-    const truncatedHeadline = truncateHeadline(sanitizedHeadline, 60);
-    const imageHeadline = addLineBreaks(truncatedHeadline, 1080, 60);
-
-    // Use the original working approach - just pass the URL directly
-    console.log('Original image URL:', imageUrl);
-    
-    const options = {
-      src: imageUrl,
-      deliveryType: "fetch" as const,
-      width: platformConfig.width,
-      height: platformConfig.height,
-      crop: platformConfig.crop,
-      gravity: "auto:subject" as const,
-      format: "auto" as const,
-      quality: "auto" as const,
-      fetchFormat: "auto" as const,
-      dpr: "2.0",
-      overlays: [
-        {
-          position: { gravity: "south" as const, y: 40 },
-          text: {
-            color: "white",
-            fontFamily: "montserrat",
-            fontSize: 60,
-            fontWeight: "bold" as const,
-            stroke: "stroke_black",
-            text: imageHeadline,
-            width: 900,
-          },
-          effects: [
-            { background: getRandomBackgroundColor() },
-            { border: "21px_solid_rgb:00000000" },
-            { padding: 36 },
-            { radius: 0 },
-          ],
-        },
-      ],
-    };
-
-    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-    if (!cloudName) {
-      throw new Error('Cloudinary cloud name not configured');
+  try {
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error(`Failed to fetch image: ${imageResponse.statusText}`);
     }
+    const imageBuffer = await imageResponse.arrayBuffer();
 
-    const cloudinaryConfig = {
-      cloud: {
-        cloudName: cloudName,
-      },
-    };
+    const sanitizedHeadline = sanitizeHeadline(headline);
+    const truncatedHeadline = truncateHeadline(sanitizedHeadline, 60);
+    const imageHeadline = addLineBreaks(truncatedHeadline, 900, 60);
 
-    const generatedUrl = getCldImageUrl(options, cloudinaryConfig);
-    console.log('Generated Cloudinary URL for platform', platform, ':', generatedUrl);
+    const width = 1080;
+    const height = 1080;
+
+    const lines = imageHeadline.split('\n');
+    const svgText = lines.map((line, index) => `<tspan x="50%" dy="${index === 0 ? 0 : '1.2em'}" text-anchor="middle">${line}</tspan>`).join('');
+
+    const svg = `
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <style>
+            .title { 
+              fill: white; 
+              stroke: black;
+              stroke-width: 3px;
+              font-size: 60px; 
+              font-family: Arial, Helvetica, sans-serif; 
+              font-weight: bold; 
+              text-anchor: middle;
+              dominant-baseline: middle;
+            }
+          </style>
+        </defs>
+        <text x="50%" y="80%" class="title">${svgText}</text>
+      </svg>
+    `;
+
+    const imageWithText = await sharp(Buffer.from(imageBuffer))
+      .resize(width, height, { fit: 'cover', position: 'center' })
+      .composite([{
+        input: Buffer.from(svg),
+        gravity: 'south',
+      }])
+      .toBuffer();
+
+    const blob = await put(`${sanitizedHeadline.replace(/\s/g, '-')}.jpg`, imageWithText, {
+      access: 'public',
+    });
     
-    results[platform as keyof typeof results] = generatedUrl;
+    return { instagram: blob.url };
+  } catch (error) {
+    console.error('Error generating image with sharp:', error);
+    return { instagram: 'https://placehold.co/1080x1080?text=No+Image' };
   }
-
-  return results;
 }
+
 
 async function callGemini(posts: { headline: string; description: string; imageUrl: string | null; link: string | null }[]): Promise<
   { originalHeadline: string; newHeadline: string; description: string; imageUrl: string | null; link: string | null }[]
@@ -238,7 +220,7 @@ async function callGemini(posts: { headline: string; description: string; imageU
     let content = result.response.text();
     console.log('Raw Gemini response:', content); // Debug log
     // Remove markdown code fences and trim whitespace
-    content = content.replace(/```json\n|\n```/g, '').trim();
+    content = content.replace(/\`\`\`json\n|\n\`\`\`/g, '').trim();
     const parsedContent = JSON.parse(content);
     if (!Array.isArray(parsedContent)) {
       throw new Error('Gemini did not return an array of posts');
@@ -276,8 +258,9 @@ export async function GET() {
     const posts = postsArrays.flat().filter((post): post is NonNullable<typeof post> => post !== null);
 
     // Filter out duplicates using Redis storage
-    const usedHeadlines = await readUsedHeadlines();
-    const uniquePosts = posts.filter((post) => !usedHeadlines.includes(post.headline));
+    // const usedHeadlines = await readUsedHeadlines();
+    // const uniquePosts = posts.filter((post) => !usedHeadlines.includes(post.headline));
+    const uniquePosts = posts;
 
     if (uniquePosts.length === 0) {
       return NextResponse.json<NewsApiResponse>(
@@ -312,7 +295,7 @@ export async function GET() {
       );
     }
 
-    // Process posts and filter for valid Cloudinary URLs
+    // Process posts and filter for valid posts
     const validPostPayloads = [];
     const processedHeadlines = new Set<string>();
 
@@ -344,24 +327,18 @@ export async function GET() {
 
       if (imageUrl && isValidUrl(imageUrl)) {
         try {
-          // Clean the URL properly for Cloudinary fetch
           const cleanUrl = imageUrl.split('?')[0].replace(/\/$/, '');
           console.log('Generating image for URL:', imageUrl);
           console.log('Cleaned URL:', cleanUrl);
           
           platformImages = await generateInstagramImage(cleanUrl, newHeadline);
-          console.log('Generated Cloudinary URL:', platformImages.instagram);
           
-          // Test the generated URL
-          const testResponse = await fetch(platformImages.instagram, { method: 'HEAD' });
-          if (testResponse.ok) {
+          if (platformImages.instagram && platformImages.instagram.startsWith('https')) {
             postPayload = { instagram: { image_url: platformImages.instagram, caption: presetCaption } };
             isValidImage = true;
-            console.log('Successfully validated Cloudinary URL');
+            console.log('Successfully generated image and uploaded to Vercel Blob');
           } else {
-            console.warn(`Skipping post due to invalid Cloudinary URL: ${testResponse.statusText} (URL: ${platformImages.instagram})`);
-            console.warn('Response status:', testResponse.status);
-            console.warn('Response headers:', Object.fromEntries(testResponse.headers.entries()));
+            console.warn(`Skipping post due to invalid image generated by Vercel Blob`);
           }
         } catch (error) {
           console.error('Image generation error for URL:', imageUrl, error);
@@ -397,6 +374,7 @@ export async function GET() {
     const finalPostPayloads = validPostPayloads;
     console.log(`Successfully processed ${finalPostPayloads.length} valid posts for posting`);
 
+    
     // Append original headlines to Redis
     try {
       await appendUsedHeadlines(finalPostPayloads.map((post) => post.originalHeadline));
@@ -404,6 +382,7 @@ export async function GET() {
       console.error('Failed to append headlines, continuing with response:', error);
       // Continue to return response even if headline append fails
     }
+    
 
     return NextResponse.json<NewsApiResponse>({
       success: true,
