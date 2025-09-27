@@ -160,11 +160,20 @@ async function generateInstagramImage(
     const svgText = lines.map((line, index) => `<tspan x="50%" dy="${index === 0 ? 0 : '1.2em'}" text-anchor="middle">${line}</tspan>`).join('');
 
     const svg = `
-      <svg width="${width}" height="${height}">
-        <style>
-          .title { fill: white; font-size: 60px; font-family: Montserrat, sans-serif; font-weight: bold; text-align: center; }
-        </style>
-        <text x="50%" y="900" class="title" text-anchor="middle">${svgText}</text>
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <style>
+            .title { 
+              fill: white; 
+              font-size: 60px; 
+              font-family: Arial, Helvetica, sans-serif; 
+              font-weight: bold; 
+              text-anchor: middle;
+              dominant-baseline: middle;
+            }
+          </style>
+        </defs>
+        <text x="50%" y="85%" class="title">${svgText}</text>
       </svg>
     `;
 
