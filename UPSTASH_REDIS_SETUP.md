@@ -28,22 +28,18 @@ This application uses Upstash Redis for persistent storage of used headlines, re
 7. Select a region close to your users
 8. Click "Create"
 
-### 2. Get Connection Details
-1. In your Upstash Redis dashboard, go to the "Details" tab
-2. Copy the following environment variables:
-   - `UPSTASH_REDIS_REST_URL`
-   - `UPSTASH_REDIS_REST_TOKEN`
+### 2. Environment Variables (Already Set!)
+Vercel automatically provides these environment variables when you create an Upstash Redis database:
 
-### 3. Add Environment Variables to Vercel
-1. In your Vercel project dashboard, go to "Settings"
-2. Click "Environment Variables"
-3. Add the following variables:
-   ```
-   UPSTASH_REDIS_REST_URL=your_redis_url_here
-   UPSTASH_REDIS_REST_TOKEN=your_redis_token_here
-   ```
+- `KV_REST_API_URL` - Redis REST API URL
+- `KV_REST_API_TOKEN` - Redis REST API token
+- `KV_REST_API_READ_ONLY_TOKEN` - Read-only token (optional)
+- `REDIS_URL` - Standard Redis connection URL
+- `KV_URL` - Alternative Redis URL
 
-### 4. Redeploy Your Application
+**No manual setup needed!** These are automatically available in your Vercel environment.
+
+### 3. Deploy Your Application
 1. Push your changes to your Git repository
 2. Vercel will automatically redeploy
 3. The application will now use Upstash Redis for persistent storage
@@ -67,7 +63,7 @@ This application uses Upstash Redis for persistent storage of used headlines, re
 
 If you encounter issues:
 
-1. **Check Environment Variables**: Ensure `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set
+1. **Check Environment Variables**: Ensure `KV_REST_API_URL` and `KV_REST_API_TOKEN` are set
 2. **Verify Redis Database**: Make sure your Upstash Redis database is active in Vercel dashboard
 3. **Check Logs**: Look for Redis-related errors in Vercel function logs
 4. **Test Connection**: The app will log Redis operations for debugging

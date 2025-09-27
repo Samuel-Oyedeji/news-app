@@ -6,7 +6,7 @@ import sizeOf from "image-size";
 import { Buffer } from "buffer";
 import fetch from "node-fetch";
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { get } from '@vercel/edge-config';
+import { Redis } from '@upstash/redis';
 
 const parser = new Parser({
   customFields: {
@@ -24,69 +24,49 @@ const VARIETY_RSS_ENDPOINTS = [
   'https://variety.com/v/digital/feed/',
 ];
 
-// In-memory cache for recent headlines (resets on function restart)
-let recentHeadlinesCache: { headlines: string[]; timestamp: number } = {
-  headlines: [],
-  timestamp: 0
-};
+// Initialize Upstash Redis client
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
 
-// Cache duration: 1 hour (3600000 ms)
-const CACHE_DURATION = 60 * 60 * 1000;
+// Redis key for storing used headlines
+const USED_HEADLINES_KEY = 'used_headlines';
 
-// Function to get recent headlines from cache or Edge Config
-async function getRecentHeadlines(): Promise<string[]> {
-  const now = Date.now();
-  
-  // Check if cache is still valid
-  if (now - recentHeadlinesCache.timestamp < CACHE_DURATION && recentHeadlinesCache.headlines.length > 0) {
-    console.log('Using cached headlines:', recentHeadlinesCache.headlines.length, 'items');
-    return recentHeadlinesCache.headlines;
-  }
-  
-  // Try to get headlines from Edge Config (if configured)
+// Function to read used headlines from Redis
+async function readUsedHeadlines(): Promise<string[]> {
   try {
-    console.log('Reading recent headlines from Edge Config');
-    const headlines = await get<string[]>('recent_headlines');
-    if (Array.isArray(headlines)) {
-      recentHeadlinesCache = {
-        headlines,
-        timestamp: now
-      };
-      console.log('Retrieved headlines from Edge Config:', headlines.length, 'items');
-      return headlines;
-    }
+    console.log('Reading used headlines from Upstash Redis');
+    const headlines = await redis.get<string[]>(USED_HEADLINES_KEY);
+    const result = Array.isArray(headlines) ? headlines : [];
+    console.log('Retrieved headlines from Redis:', result.length, 'items');
+    return result;
   } catch (error) {
-    console.log('Edge Config not available or not configured, using empty array');
+    console.error('Error reading used headlines from Redis:', error);
+    // Return empty array if Redis is not available (fallback)
+    return [];
   }
-  
-  // Return empty array if no cache or Edge Config available
-  recentHeadlinesCache = {
-    headlines: [],
-    timestamp: now
-  };
-  return [];
 }
 
-// Function to update recent headlines cache
-function updateRecentHeadlinesCache(newHeadlines: string[]): void {
+// Function to append headlines to Redis
+async function appendUsedHeadlines(headlines: string[]): Promise<void> {
   try {
-    console.log('Updating recent headlines cache:', newHeadlines);
-    if (!newHeadlines || newHeadlines.length === 0) {
-      console.warn('No headlines to cache');
+    console.log('Appending headlines to Upstash Redis:', headlines);
+    if (!headlines || headlines.length === 0) {
+      console.warn('No headlines to append');
       return;
     }
     
-    const existingHeadlines = recentHeadlinesCache.headlines;
-    const updatedHeadlines = [...new Set([...existingHeadlines, ...newHeadlines])]; // Remove duplicates
+    const existingHeadlines = await readUsedHeadlines();
+    const updatedHeadlines = [...new Set([...existingHeadlines, ...headlines])]; // Remove duplicates
     
-    recentHeadlinesCache = {
-      headlines: updatedHeadlines,
-      timestamp: Date.now()
-    };
-    
-    console.log('Successfully updated headlines cache:', updatedHeadlines.length, 'total items');
+    // Store in Redis with 7 days expiration
+    await redis.setex(USED_HEADLINES_KEY, 7 * 24 * 60 * 60, updatedHeadlines);
+    console.log('Successfully updated headlines in Redis:', updatedHeadlines.length, 'total items');
   } catch (error) {
-    console.error('Error updating headlines cache:', error);
+    console.error('Error appending to Redis:', error);
+    // Don't throw error to prevent API failure, just log it
+    console.warn('Continuing without storing headlines due to Redis error');
   }
 }
 
@@ -290,9 +270,9 @@ export async function GET() {
 
     const posts = (await Promise.all(postsPromises)).filter((post): post is NonNullable<typeof post> => post !== null);
 
-    // Filter out duplicates using recent headlines cache
-    const recentHeadlines = await getRecentHeadlines();
-    const uniquePosts = posts.filter((post) => !recentHeadlines.includes(post.headline));
+    // Filter out duplicates using Redis storage
+    const usedHeadlines = await readUsedHeadlines();
+    const uniquePosts = posts.filter((post) => !usedHeadlines.includes(post.headline));
 
     if (uniquePosts.length === 0) {
       return NextResponse.json<NewsApiResponse>(
@@ -396,12 +376,12 @@ export async function GET() {
     // Take the first 3 valid posts
     const finalPostPayloads = validPostPayloads.slice(0, 3);
 
-    // Update recent headlines cache
+    // Append original headlines to Redis
     try {
-      updateRecentHeadlinesCache(finalPostPayloads.map((post) => post.originalHeadline));
+      await appendUsedHeadlines(finalPostPayloads.map((post) => post.originalHeadline));
     } catch (error) {
-      console.error('Failed to update headlines cache, continuing with response:', error);
-      // Continue to return response even if cache update fails
+      console.error('Failed to append headlines, continuing with response:', error);
+      // Continue to return response even if headline append fails
     }
 
     return NextResponse.json<NewsApiResponse>({
