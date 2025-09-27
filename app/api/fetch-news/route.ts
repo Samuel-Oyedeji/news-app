@@ -156,26 +156,23 @@ async function generateInstagramImage(
     const width = 1080;
     const height = 1080;
 
+    // Create a simple text overlay using basic SVG without font dependencies
     const lines = imageHeadline.split('\n');
-    const svgText = lines.map((line, index) => `<tspan x="50%" dy="${index === 0 ? 0 : '1.2em'}" text-anchor="middle">${line}</tspan>`).join('');
+    const svgText = lines.map((line, index) => 
+      `<tspan x="50%" dy="${index === 0 ? 0 : '1.2em'}" text-anchor="middle">${line}</tspan>`
+    ).join('');
 
     const svg = `
       <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <style>
-            .title { 
-              fill: white; 
-              stroke: black;
-              stroke-width: 1px;
-              font-size: 60px; 
-              font-family: Arial, Helvetica, sans-serif; 
-              font-weight: bold; 
-              text-anchor: middle;
-              dominant-baseline: middle;
-            }
-          </style>
-        </defs>
-        <text x="50%" y="80%" class="title">${svgText}</text>
+        <text x="50%" y="80%" text-anchor="middle" 
+              fill="white" 
+              stroke="black" 
+              stroke-width="1" 
+              font-size="60" 
+              font-family="monospace"
+              font-weight="bold">
+          ${svgText}
+        </text>
       </svg>
     `;
 
