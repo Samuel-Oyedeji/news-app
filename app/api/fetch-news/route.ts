@@ -103,7 +103,16 @@ function truncateHeadline(headline: string, maxLength: number = 70): string {
 // Function to sanitize headline by removing emojis and special characters
 function sanitizeHeadline(headline: string): string {
   // Remove emojis (Unicode characters outside basic ASCII)
-  return headline.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+  let sanitized = headline.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+  
+  // Remove or replace problematic characters for Cloudinary text overlays
+  sanitized = sanitized
+    .replace(/['"]/g, '') // Remove quotes
+    .replace(/[&]/g, 'and') // Replace & with 'and'
+    .replace(/[^\w\s\-.,!?]/g, '') // Keep only alphanumeric, spaces, hyphens, periods, commas, exclamation, question
+    .trim();
+  
+  return sanitized;
 }
 
 function getRandomBackgroundColor() {
@@ -140,7 +149,8 @@ async function generateInstagramImage(
 
   // Sanitize headline to remove emojis
   const sanitizedHeadline = sanitizeHeadline(headline);
-  console.log('Sanitized headline:', sanitizedHeadline); // Debug log
+  console.log('Original headline:', headline);
+  console.log('Sanitized headline:', sanitizedHeadline);
 
   for (const [platform, platformConfig] of Object.entries(platforms)) {
     // Fixed Instagram dimensions - no need for dynamic sizing
@@ -151,13 +161,11 @@ async function generateInstagramImage(
     const truncatedHeadline = truncateHeadline(sanitizedHeadline, 60);
     const imageHeadline = addLineBreaks(truncatedHeadline, 1080, 60);
 
-    // URL encode the source for Cloudinary fetch
-    const encodedSrc = encodeURIComponent(imageUrl);
+    // Use the original working approach - just pass the URL directly
     console.log('Original image URL:', imageUrl);
-    console.log('Encoded source URL:', encodedSrc);
     
     const options = {
-      src: encodedSrc,
+      src: imageUrl,
       deliveryType: "fetch" as const,
       width: platformConfig.width,
       height: platformConfig.height,
@@ -217,12 +225,12 @@ async function callGemini(posts: { headline: string; description: string; imageU
   if (!apiKey) throw new Error('Google Gemini API key not configured');
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const prompt = `
     Here is a JSON array of entertainment news items from Variety: ${JSON.stringify(posts)}.
 
-    Select exactly 3 of the most engaging and relevant posts (prioritizing topics like movies, TV, celebrities, music, awards, Hollywood events, and avoiding low-interest items). For each selected post, return the original headline, a new attention-grabbing headline (optimized for social media, concise, and engaging), description, imageUrl, and link. Return only a JSON array of exactly 3 objects, each with the keys: originalHeadline, newHeadline, description, imageUrl, link. Do not include any other text.
+    Select 1-3 of the most engaging and relevant posts (prioritizing topics like movies, TV, celebrities, music, awards, Hollywood events, and avoiding low-interest items). Choose the best posts available - if there are 3 great posts, select 3; if only 1-2 are good, select those. For each selected post, return the original headline, a new attention-grabbing headline (optimized for social media, concise, and engaging), description, imageUrl, and link. Return only a JSON array of 1-3 objects, each with the keys: originalHeadline, newHeadline, description, imageUrl, link. Do not include any other text.
   `;
 
   try {
@@ -288,13 +296,14 @@ export async function GET() {
     
     console.log(`Found ${shuffledPosts.length} unique posts, filtered to ${qualityPosts.length} quality posts for Gemini`);
 
-    // Call Gemini to select exactly 3 posts
+    // Call Gemini to select 1-3 posts
     let selectedPosts: { originalHeadline: string; newHeadline: string; description: string; imageUrl: string | null; link: string | null }[];
     try {
       selectedPosts = await callGemini(qualityPosts);
       if (selectedPosts.length === 0) {
         throw new Error('Gemini returned no posts');
       }
+      console.log(`Gemini selected ${selectedPosts.length} posts for processing`);
     } catch (error) {
       console.error('Gemini error:', error);
       return NextResponse.json<NewsApiResponse>(
@@ -308,7 +317,7 @@ export async function GET() {
     const processedHeadlines = new Set<string>();
 
     for (const post of selectedPosts) {
-      if (validPostPayloads.length >= 3) break; // Stop once we have 3 valid posts
+      // Process all selected posts (no limit)
 
       const { newHeadline, description, imageUrl, link, originalHeadline } = post;
 
@@ -376,16 +385,17 @@ export async function GET() {
       }
     }
 
-    // Check if we have exactly 3 valid posts
-    if (validPostPayloads.length < 3) {
+    // Check if we have at least 1 valid post
+    if (validPostPayloads.length === 0) {
       return NextResponse.json<NewsApiResponse>(
-        { success: false, message: `Could not find 3 posts with valid image URLs, found ${validPostPayloads.length}` },
+        { success: false, message: 'Could not find any posts with valid image URLs' },
         { status: 404 }
       );
     }
 
-    // Take the first 3 valid posts
-    const finalPostPayloads = validPostPayloads.slice(0, 3);
+    // Take all valid posts (1, 2, or 3)
+    const finalPostPayloads = validPostPayloads;
+    console.log(`Successfully processed ${finalPostPayloads.length} valid posts for posting`);
 
     // Append original headlines to Redis
     try {
