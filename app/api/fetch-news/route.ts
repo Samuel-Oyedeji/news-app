@@ -151,8 +151,13 @@ async function generateInstagramImage(
     const truncatedHeadline = truncateHeadline(sanitizedHeadline, 60);
     const imageHeadline = addLineBreaks(truncatedHeadline, 1080, 60);
 
+    // URL encode the source for Cloudinary fetch
+    const encodedSrc = encodeURIComponent(imageUrl);
+    console.log('Original image URL:', imageUrl);
+    console.log('Encoded source URL:', encodedSrc);
+    
     const options = {
-      src: imageUrl,
+      src: encodedSrc,
       deliveryType: "fetch" as const,
       width: platformConfig.width,
       height: platformConfig.height,
@@ -176,21 +181,29 @@ async function generateInstagramImage(
           },
           effects: [
             { background: getRandomBackgroundColor() },
-            { border: "21px_solid_rgb:00000000" }, // Fixed border based on 60px font size
-            { padding: 36 }, // Fixed padding based on 60px font size
-            { radius: 0 }, // Sharp corners - no border radius
+            { border: "21px_solid_rgb:00000000" },
+            { padding: 36 },
+            { radius: 0 },
           ],
         },
       ],
     };
 
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    if (!cloudName) {
+      throw new Error('Cloudinary cloud name not configured');
+    }
+
     const cloudinaryConfig = {
       cloud: {
-        cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+        cloudName: cloudName,
       },
     };
 
-    results[platform as keyof typeof results] = getCldImageUrl(options, cloudinaryConfig);
+    const generatedUrl = getCldImageUrl(options, cloudinaryConfig);
+    console.log('Generated Cloudinary URL for platform', platform, ':', generatedUrl);
+    
+    results[platform as keyof typeof results] = generatedUrl;
   }
 
   return results;
@@ -322,20 +335,24 @@ export async function GET() {
 
       if (imageUrl && isValidUrl(imageUrl)) {
         try {
+          // Clean the URL properly for Cloudinary fetch
           const cleanUrl = imageUrl.split('?')[0].replace(/\/$/, '');
-          const needsEscaping = /[?=&#]/.test(cleanUrl);
-          const finalUrl = needsEscaping ? encodeURIComponent(cleanUrl) : cleanUrl;
-          console.log('Generating image for URL:', imageUrl); // Debug log
-          console.log('Cleaned URL:', cleanUrl); // Debug log
-          console.log('Final URL:', finalUrl); // Debug log
-          platformImages = await generateInstagramImage(finalUrl, newHeadline);
-          console.log('Generated Cloudinary URL:', platformImages.instagram); // Debug log
+          console.log('Generating image for URL:', imageUrl);
+          console.log('Cleaned URL:', cleanUrl);
+          
+          platformImages = await generateInstagramImage(cleanUrl, newHeadline);
+          console.log('Generated Cloudinary URL:', platformImages.instagram);
+          
+          // Test the generated URL
           const testResponse = await fetch(platformImages.instagram, { method: 'HEAD' });
           if (testResponse.ok) {
             postPayload = { instagram: { image_url: platformImages.instagram, caption: presetCaption } };
             isValidImage = true;
+            console.log('Successfully validated Cloudinary URL');
           } else {
             console.warn(`Skipping post due to invalid Cloudinary URL: ${testResponse.statusText} (URL: ${platformImages.instagram})`);
+            console.warn('Response status:', testResponse.status);
+            console.warn('Response headers:', Object.fromEntries(testResponse.headers.entries()));
           }
         } catch (error) {
           console.error('Image generation error for URL:', imageUrl, error);

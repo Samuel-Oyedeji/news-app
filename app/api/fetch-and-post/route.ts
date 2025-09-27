@@ -34,7 +34,11 @@ interface CombinedResponse {
 export async function GET() {
   try {
     // Step 1: Fetch news from the news API
-    const newsResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/fetch-news`);
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const newsUrl = `${baseUrl}/api/fetch-news`;
+    console.log('Fetching news from:', newsUrl);
+    
+    const newsResponse = await fetch(newsUrl);
 
     if (!newsResponse.ok) {
       throw new Error(`Failed to fetch news: ${newsResponse.status} ${newsResponse.statusText}`);
@@ -57,7 +61,10 @@ export async function GET() {
     }
 
     // Step 2: Post to Instagram
-    const instagramResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/post-instagram`, {
+    const instagramUrl = `${baseUrl}/api/post-instagram`;
+    console.log('Posting to Instagram via:', instagramUrl);
+    
+    const instagramResponse = await fetch(instagramUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
