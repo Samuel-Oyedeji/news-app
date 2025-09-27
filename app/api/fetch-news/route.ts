@@ -166,7 +166,7 @@ async function generateInstagramImage(
             .title { 
               fill: white; 
               stroke: black;
-              stroke-width: 3px;
+              stroke-width: 1px;
               font-size: 60px; 
               font-family: Arial, Helvetica, sans-serif; 
               font-weight: bold; 
