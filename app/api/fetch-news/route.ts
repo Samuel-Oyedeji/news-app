@@ -261,6 +261,17 @@ async function generateInstagramImage(
     const width = 1080;
     const height = 1080;
 
+    // Register custom font for better text rendering
+    try {
+      const fontPath = path.resolve(process.cwd(), 'public', 'fonts', 'ARIBLK.TTF');
+      if (!GlobalFonts.has('ArialBlack')) {
+        GlobalFonts.registerFromPath(fontPath, 'ArialBlack');
+        console.log('Registered ArialBlack font from:', fontPath);
+      }
+    } catch (fontError) {
+      console.warn('Could not register custom font, using fallback:', fontError);
+    }
+
     // Resize image with Sharp first
     const resizedImage = await sharp(Buffer.from(imageBuffer))
       .resize(width, height, { fit: 'cover', position: 'center' })
@@ -274,9 +285,11 @@ async function generateInstagramImage(
     // Load and draw the background image
     const img = await loadImage(resizedImage);
     ctx.drawImage(img, 0, 0, width, height);
+    console.log('Background image drawn successfully');
 
-    // Set text properties
-    ctx.font = 'bold 60px sans-serif';
+    // Set text properties with registered font
+    const fontFamily = GlobalFonts.has('ArialBlack') ? 'ArialBlack' : 'sans-serif';
+    ctx.font = `bold 60px ${fontFamily}`;
     ctx.fillStyle = 'white';
     ctx.strokeStyle = 'black';
     ctx.lineWidth = 3;
@@ -288,6 +301,7 @@ async function generateInstagramImage(
     const lineHeight = 80;
     const startY = height * 0.8;
     
+    console.log(`Drawing ${lines.length} text lines with font: ${fontFamily}`);
     lines.forEach((line, index) => {
       const y = startY + (index * lineHeight);
       ctx.strokeText(line, width / 2, y);
@@ -296,6 +310,7 @@ async function generateInstagramImage(
 
     // Convert canvas to JPEG buffer
     const imageWithText = canvas.toBuffer('image/jpeg');
+    console.log('Canvas converted to JPEG buffer, size:', imageWithText.length);
 
     const blob = await put(`${sanitizedHeadline.replace(/\s/g, '-')}.jpg`, imageWithText, {
       access: 'public',
@@ -304,7 +319,7 @@ async function generateInstagramImage(
     console.log('Successfully generated image with text overlay using @napi-rs/canvas');
     return { instagram: blob.url };
   } catch (error) {
-    console.error('Error generating image:', error);
+    console.error('Error generating image with @napi-rs/canvas:', error);
     return { instagram: 'https://placehold.co/1080x1080?text=No+Image' };
   }
 }
