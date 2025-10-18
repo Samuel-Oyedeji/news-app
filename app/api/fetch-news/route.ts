@@ -7,6 +7,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Redis } from '@upstash/redis';
 import sharp from 'sharp';
 import { put } from '@vercel/blob';
+import path from 'path';
+import { promises as fs } from 'fs';
 
 const parser = new Parser({
   customFields: {
@@ -33,6 +35,30 @@ const redis = new Redis({
 
 // Redis key for storing used headlines
 const USED_HEADLINES_KEY = 'used_headlines';
+
+const FONT_FILE_PATH = path.join(process.cwd(), 'public', 'fonts', 'ARIBLK.TTF');
+const INSTAGRAM_FONT_FAMILY = 'ArialBlack';
+let cachedFontPath: string | null = null;
+let cachedFontData: string | null = null;
+
+async function getFontData(): Promise<string | null> {
+  if (cachedFontData !== null && cachedFontPath === FONT_FILE_PATH) {
+    return cachedFontData;
+  }
+
+  try {
+    const fontBuffer = await fs.readFile(FONT_FILE_PATH);
+    cachedFontData = Buffer.from(fontBuffer).toString('base64');
+    cachedFontPath = FONT_FILE_PATH;
+    console.log(`Loaded Instagram overlay font from ${FONT_FILE_PATH}`);
+    return cachedFontData;
+  } catch (error) {
+    console.error('Failed to load font for Instagram image overlay:', error);
+    cachedFontData = null;
+    cachedFontPath = null;
+    return null;
+  }
+}
 
 // Function to read used headlines from Redis
 async function readUsedHeadlines(): Promise<string[]> {
@@ -128,6 +154,54 @@ function getRandomBackgroundColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
+type RGBColor = { r: number; g: number; b: number; a: number };
+
+function clampColorValue(value: number): number {
+  if (Number.isNaN(value)) return 0;
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function parseRgba(color: string): RGBColor | null {
+  const match = color.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\)/i);
+  if (!match) return null;
+
+  const [, r, g, b, a] = match;
+  return {
+    r: clampColorValue(Number(r)),
+    g: clampColorValue(Number(g)),
+    b: clampColorValue(Number(b)),
+    a: a !== undefined ? Math.max(0, Math.min(1, Number(a))) : 1,
+  };
+}
+
+function toRgbaString({ r, g, b }: RGBColor, alpha: number): string {
+  return `rgba(${clampColorValue(r)}, ${clampColorValue(g)}, ${clampColorValue(b)}, ${Math.max(0, Math.min(1, Number(alpha)))})`;
+}
+
+function getTextColors(): { fill: string; stroke: string } {
+  const baseColor = getRandomBackgroundColor();
+  const parsed = parseRgba(baseColor);
+
+  if (!parsed) {
+    return {
+      fill: 'rgba(255, 255, 255, 1)',
+      stroke: 'rgba(0, 0, 0, 0.9)',
+    };
+  }
+
+  const strokeColor = {
+    r: Math.max(0, parsed.r - 150),
+    g: Math.max(0, parsed.g - 150),
+    b: Math.max(0, parsed.b - 150),
+    a: parsed.a,
+  };
+
+  return {
+    fill: 'rgba(255, 255, 255, 1)',
+    stroke: toRgbaString(strokeColor, 1),
+  };
+}
+
 // Function to validate URL
 function isValidUrl(url: string): boolean {
   try {
@@ -156,25 +230,36 @@ async function generateInstagramImage(
     const width = 1080;
     const height = 1080;
 
-    // Create a simple text overlay using basic SVG without font dependencies
+    // Create text overlay SVG, embedding a custom font so it renders consistently on Vercel
     const lines = imageHeadline.split('\n');
     const svgText = lines.map((line, index) => 
       `<tspan x="50%" dy="${index === 0 ? 0 : '1.2em'}" text-anchor="middle">${line}</tspan>`
     ).join('');
 
-    const svg = `
-      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        <text x="50%" y="80%" text-anchor="middle" 
-              fill="white" 
-              stroke="black" 
-              stroke-width="1" 
-              font-size="60" 
-              font-family="monospace"
-              font-weight="bold">
-          ${svgText}
-        </text>
-      </svg>
-    `;
+    const fontData = await getFontData();
+    const fontFamily = fontData ? INSTAGRAM_FONT_FAMILY : 'Georgia';
+    const fontStyleBlock = fontData
+      ? `@font-face { font-family: '${INSTAGRAM_FONT_FAMILY}'; src: url('data:font/ttf;base64,${fontData}') format('truetype'); font-weight: bold; font-style: normal; }
+         text { font-family: '${INSTAGRAM_FONT_FAMILY}', serif; font-style: normal; font-weight: 700; }`
+      : `text { font-family: 'Georgia', serif; font-weight: 700; }`;
+    const { fill: textFill, stroke: textStroke } = getTextColors();
+
+  const svg = `
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+          <style>${fontStyleBlock}</style>
+      </defs>
+      <text x="50%" y="80%" text-anchor="middle" 
+            fill="${textFill}" 
+            stroke="${textStroke}" 
+            stroke-width="1" 
+            font-size="60" 
+              font-family="${fontFamily}"
+            font-weight="bold">
+        ${svgText}
+      </text>
+    </svg>
+  `;
 
     const imageWithText = await sharp(Buffer.from(imageBuffer))
       .resize(width, height, { fit: 'cover', position: 'center' })
