@@ -9,12 +9,9 @@ import sharp from 'sharp';
 import { put } from '@vercel/blob';
 import path from 'path';
 import { promises as fs } from 'fs';
+import { createCanvas, GlobalFonts, loadImage } from '@napi-rs/canvas';
 
 export const runtime = 'nodejs';
-
-// Disable fontconfig to prevent font errors in serverless
-process.env.FONTCONFIG_PATH = '/dev/null';
-process.env.FONTCONFIG_FILE = '/dev/null';
 
 const parser = new Parser({
   customFields: {
@@ -245,7 +242,7 @@ function isValidUrl(url: string): boolean {
   }
 }
 
-// Generate image with text overlay using Sharp only (most reliable approach)
+// Generate image with text overlay using @napi-rs/canvas (serverless-compatible)
 async function generateInstagramImage(
   imageUrl: string,
   headline: string
@@ -264,42 +261,50 @@ async function generateInstagramImage(
     const width = 1080;
     const height = 1080;
 
-    // Create a simple text overlay using basic SVG without font dependencies
-    const lines = imageHeadline.split('\n');
-    const svgText = lines.map((line, index) => 
-      `<tspan x="50%" dy="${index === 0 ? 0 : '1.2em'}" text-anchor="middle">${line}</tspan>`
-    ).join('');
-
-    const svg = `
-      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        <text x="50%" y="80%" text-anchor="middle" 
-              fill="white" 
-              stroke="black" 
-              stroke-width="3" 
-              font-size="60" 
-              font-family="monospace"
-              font-weight="bold">
-          ${svgText}
-        </text>
-      </svg>
-    `;
-
-    const imageWithText = await sharp(Buffer.from(imageBuffer))
+    // Resize image with Sharp first
+    const resizedImage = await sharp(Buffer.from(imageBuffer))
       .resize(width, height, { fit: 'cover', position: 'center' })
-      .composite([{
-        input: Buffer.from(svg),
-        gravity: 'south',
-      }])
       .jpeg({ quality: 90 })
       .toBuffer();
+
+    // Create canvas and load background image
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // Load and draw the background image
+    const img = await loadImage(resizedImage);
+    ctx.drawImage(img, 0, 0, width, height);
+
+    // Set text properties
+    ctx.font = 'bold 60px sans-serif';
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 3;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Draw text lines
+    const lines = imageHeadline.split('\n');
+    const lineHeight = 80;
+    const startY = height * 0.8;
+    
+    lines.forEach((line, index) => {
+      const y = startY + (index * lineHeight);
+      ctx.strokeText(line, width / 2, y);
+      ctx.fillText(line, width / 2, y);
+    });
+
+    // Convert canvas to JPEG buffer
+    const imageWithText = canvas.toBuffer('image/jpeg');
 
     const blob = await put(`${sanitizedHeadline.replace(/\s/g, '-')}.jpg`, imageWithText, {
       access: 'public',
     });
     
+    console.log('Successfully generated image with text overlay using @napi-rs/canvas');
     return { instagram: blob.url };
   } catch (error) {
-    console.error('Error generating image with sharp:', error);
+    console.error('Error generating image:', error);
     return { instagram: 'https://placehold.co/1080x1080?text=No+Image' };
   }
 }

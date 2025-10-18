@@ -11,6 +11,7 @@
   "dependencies": {
     "@cloudinary-util/url-loader": "^6.0.0",
     "@google/generative-ai": "^0.24.1",
+    "@napi-rs/canvas": "^0.1.80",
     "@radix-ui/react-slot": "^1.2.3",
     "@upstash/redis": "^1.35.4",
     "@vercel/blob": "^2.0.0",
