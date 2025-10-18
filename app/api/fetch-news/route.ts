@@ -264,16 +264,27 @@ async function generateInstagramImage(
     // Resize image to Instagram dimensions
     const resizedImageBuffer = await sharp(Buffer.from(imageBuffer))
       .resize(width, height, { fit: 'cover', position: 'center' })
-      .jpeg({ quality: 90 })
+      .png() // Convert to PNG for better compatibility with pdf-lib
       .toBuffer();
 
     // Create PDF with image as background and text overlay
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([width, height]);
     
-    // Embed the image as background
-    const jpegImage = await pdfDoc.embedJpg(resizedImageBuffer);
-    page.drawImage(jpegImage, {
+    // Embed the image as background - try PNG first, fallback to JPEG
+    let embeddedImage;
+    try {
+      embeddedImage = await pdfDoc.embedPng(resizedImageBuffer);
+    } catch (pngError) {
+      console.log('PNG embedding failed, trying JPEG:', pngError);
+      const jpegBuffer = await sharp(Buffer.from(imageBuffer))
+        .resize(width, height, { fit: 'cover', position: 'center' })
+        .jpeg({ quality: 90 })
+        .toBuffer();
+      embeddedImage = await pdfDoc.embedJpg(jpegBuffer);
+    }
+    
+    page.drawImage(embeddedImage, {
       x: 0,
       y: 0,
       width: width,
