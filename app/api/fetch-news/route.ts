@@ -9,6 +9,7 @@ import sharp from 'sharp';
 import { put } from '@vercel/blob';
 import path from 'path';
 import { promises as fs } from 'fs';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 export const runtime = 'nodejs';
 
@@ -241,6 +242,7 @@ function isValidUrl(url: string): boolean {
   }
 }
 
+// Generate image with text overlay using pdf-lib (works reliably in serverless)
 async function generateInstagramImage(
   imageUrl: string,
   headline: string
@@ -259,32 +261,74 @@ async function generateInstagramImage(
     const width = 1080;
     const height = 1080;
 
-    // Create a simple text overlay using basic SVG without font dependencies
-    const lines = imageHeadline.split('\n');
-    const svgText = lines.map((line, index) => 
-      `<tspan x="50%" dy="${index === 0 ? 0 : '1.2em'}" text-anchor="middle">${line}</tspan>`
-    ).join('');
-
-    const svg = `
-      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        <text x="50%" y="80%" text-anchor="middle" 
-              fill="white" 
-              stroke="black" 
-              stroke-width="3" 
-              font-size="60" 
-              font-family="Arial, sans-serif"
-              font-weight="bold">
-          ${svgText}
-        </text>
-      </svg>
-    `;
-
-    const imageWithText = await sharp(Buffer.from(imageBuffer))
+    // Resize image to Instagram dimensions
+    const resizedImageBuffer = await sharp(Buffer.from(imageBuffer))
       .resize(width, height, { fit: 'cover', position: 'center' })
-      .composite([{
-        input: Buffer.from(svg),
-        gravity: 'south',
-      }])
+      .jpeg({ quality: 90 })
+      .toBuffer();
+
+    // Create PDF with image as background and text overlay
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([width, height]);
+    
+    // Embed the image as background
+    const jpegImage = await pdfDoc.embedJpg(resizedImageBuffer);
+    page.drawImage(jpegImage, {
+      x: 0,
+      y: 0,
+      width: width,
+      height: height,
+    });
+
+    // Use pdf-lib's built-in fonts (these always work)
+    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    
+    // Draw text lines
+    const lines = imageHeadline.split('\n');
+    const fontSize = 60;
+    const lineHeight = 80;
+    const startY = height * 0.8;
+    
+    lines.forEach((line, index) => {
+      const textWidth = font.widthOfTextAtSize(line, fontSize);
+      const x = (width - textWidth) / 2;
+      const y = startY - (index * lineHeight);
+      
+      // Draw text with stroke effect (draw multiple times with slight offsets)
+      const strokeColor = rgb(0, 0, 0); // Black stroke
+      const fillColor = rgb(1, 1, 1); // White fill
+      
+      // Draw stroke (black outline)
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dy = -2; dy <= 2; dy++) {
+          if (dx !== 0 || dy !== 0) {
+            page.drawText(line, {
+              x: x + dx,
+              y: y + dy,
+              size: fontSize,
+              font: font,
+              color: strokeColor,
+            });
+          }
+        }
+      }
+      
+      // Draw fill (white text)
+      page.drawText(line, {
+        x: x,
+        y: y,
+        size: fontSize,
+        font: font,
+        color: fillColor,
+      });
+    });
+
+    // Convert PDF to image buffer
+    const pdfBytes = await pdfDoc.save();
+    
+    // Convert PDF to JPEG using sharp
+    const imageWithText = await sharp(pdfBytes)
+      .jpeg({ quality: 90 })
       .toBuffer();
 
     const blob = await put(`${sanitizedHeadline.replace(/\s/g, '-')}.jpg`, imageWithText, {
@@ -293,7 +337,7 @@ async function generateInstagramImage(
     
     return { instagram: blob.url };
   } catch (error) {
-    console.error('Error generating image with sharp:', error);
+    console.error('Error generating image with pdf-lib:', error);
     return { instagram: 'https://placehold.co/1080x1080?text=No+Image' };
   }
 }
