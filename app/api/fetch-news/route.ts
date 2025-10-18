@@ -259,36 +259,25 @@ async function generateInstagramImage(
     const width = 1080;
     const height = 1080;
 
-    // Create text overlay SVG, embedding a custom font so it renders consistently on Vercel
+    // Create a simple text overlay using basic SVG without font dependencies
     const lines = imageHeadline.split('\n');
     const svgText = lines.map((line, index) => 
       `<tspan x="50%" dy="${index === 0 ? 0 : '1.2em'}" text-anchor="middle">${line}</tspan>`
     ).join('');
 
-    const fontData = await getFontData();
-    const fontFamily = fontData ? INSTAGRAM_FONT_FAMILY : 'Georgia';
-    const fontStyleBlock = fontData
-      ? `@font-face { font-family: '${INSTAGRAM_FONT_FAMILY}'; src: url('data:font/ttf;base64,${fontData}') format('truetype'); font-weight: bold; font-style: normal; }
-         text { font-family: '${INSTAGRAM_FONT_FAMILY}', serif; font-style: normal; font-weight: 700; }`
-      : `text { font-family: 'Georgia', serif; font-weight: 700; }`;
-    const { fill: textFill, stroke: textStroke } = getTextColors();
-
-  const svg = `
-    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-          <style>${fontStyleBlock}</style>
-      </defs>
-      <text x="50%" y="80%" text-anchor="middle" 
-            fill="${textFill}" 
-            stroke="${textStroke}" 
-            stroke-width="1" 
-            font-size="60" 
-              font-family="${fontFamily}"
-            font-weight="bold">
-        ${svgText}
-      </text>
-    </svg>
-  `;
+    const svg = `
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <text x="50%" y="80%" text-anchor="middle" 
+              fill="white" 
+              stroke="black" 
+              stroke-width="3" 
+              font-size="60" 
+              font-family="Arial, sans-serif"
+              font-weight="bold">
+          ${svgText}
+        </text>
+      </svg>
+    `;
 
     const imageWithText = await sharp(Buffer.from(imageBuffer))
       .resize(width, height, { fit: 'cover', position: 'center' })
