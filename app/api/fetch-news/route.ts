@@ -12,6 +12,10 @@ import { promises as fs } from 'fs';
 
 export const runtime = 'nodejs';
 
+// Disable fontconfig to prevent font errors in serverless
+process.env.FONTCONFIG_PATH = '/dev/null';
+process.env.FONTCONFIG_FILE = '/dev/null';
+
 const parser = new Parser({
   customFields: {
     item: ['media:thumbnail'],
@@ -273,7 +277,7 @@ async function generateInstagramImage(
               stroke="black" 
               stroke-width="3" 
               font-size="60" 
-              font-family="Arial, sans-serif"
+              font-family="monospace"
               font-weight="bold">
           ${svgText}
         </text>
