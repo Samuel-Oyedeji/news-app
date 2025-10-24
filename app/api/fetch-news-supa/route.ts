@@ -8,7 +8,6 @@ import { Redis } from '@upstash/redis';
 import sharp from 'sharp';
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
-import { promises as fs } from 'fs';
 import { createCanvas, GlobalFonts, loadImage } from '@napi-rs/canvas';
 
 export const runtime = 'nodejs';
@@ -44,10 +43,6 @@ const redis = new Redis({
 
 // Redis key for storing used headlines
 const USED_HEADLINES_KEY = 'used_headlines';
-
-const FONT_FILE_PATH = path.join(process.cwd(), 'public', 'fonts', 'ARIBLK.TTF');
-let cachedFontPath: string | null = null;
-let cachedFontData: string | null = null;
 
 // Function to read used headlines from Redis
 async function readUsedHeadlines(): Promise<string[]> {
@@ -130,17 +125,6 @@ function sanitizeHeadline(headline: string): string {
     .trim();
   
   return sanitized;
-}
-
-function getRandomBackgroundColor() {
-  const colors = [
-    'rgba(10, 15, 20, 0.8)',
-    'rgba(20, 10, 13, 0.8)',
-    'rgba(13, 12, 10, 0.8)',
-    'rgba(26, 13, 17, 0.8)',
-    'rgba(1, 20, 0, 0.8)'
-  ];
-  return colors[Math.floor(Math.random() * colors.length)];
 }
 
 // Function to validate URL
