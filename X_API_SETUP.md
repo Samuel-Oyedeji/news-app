@@ -73,7 +73,7 @@ NEXT_PUBLIC_BASE_URL=http://localhost:3000
 - This combines news fetching and posting to all platforms
 
 ### 4. Existing Endpoints
-- **GET** `/api/fetch-news` - Fetch news only
+- **GET** `/api/fetch-news-supa` - Fetch news only
 - **GET** `/api/fetch-and-post` - Fetch news and post to Instagram only
 
 ## How X Posting Works

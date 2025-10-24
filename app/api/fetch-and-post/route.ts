@@ -35,7 +35,7 @@ export async function GET() {
   try {
     // Step 1: Fetch news from the news API
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const newsUrl = `${baseUrl}/api/fetch-news`;
+    const newsUrl = `${baseUrl}/api/fetch-news-supa`;
     console.log('Fetching news from:', newsUrl);
     
     const newsResponse = await fetch(newsUrl);

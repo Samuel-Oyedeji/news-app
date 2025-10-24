@@ -42,7 +42,7 @@ interface AllSocialResponse {
 export async function GET() {
   try {
     // Step 1: Fetch news from the news API
-    const newsResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/fetch-news`);
+    const newsResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/fetch-news-supa`);
 
     if (!newsResponse.ok) {
       throw new Error(`Failed to fetch news: ${newsResponse.status} ${newsResponse.statusText}`);

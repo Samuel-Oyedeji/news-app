@@ -58,7 +58,7 @@ You can get your Instagram user ID by:
 - This combines both operations in one call
 
 ### 3. Fetch News Only (existing)
-- **GET** `/api/fetch-news`
+- **GET** `/api/fetch-news-supa`
 
 ## Testing
 

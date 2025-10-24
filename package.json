@@ -13,6 +13,7 @@
     "@google/generative-ai": "^0.24.1",
     "@napi-rs/canvas": "^0.1.80",
     "@radix-ui/react-slot": "^1.2.3",
+    "@supabase/supabase-js": "^2.76.1",
     "@upstash/redis": "^1.35.4",
     "@vercel/blob": "^2.0.0",
     "@vercel/edge-config": "^1.4.0",

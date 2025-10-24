@@ -29,8 +29,8 @@ export default function Home() {
 
   const fetchNews = async () => {
     try {
-      setLoading('fetch-news');
-      const res = await fetch('/api/fetch-news');
+      setLoading('fetch-news-supa');
+      const res = await fetch('/api/fetch-news-supa');
       const json: NewsApiResponse = await res.json();
       setData(json);
       setResult(null);
@@ -154,10 +154,10 @@ export default function Home() {
               onClick={fetchNews}
               disabled={loading !== null}
               className={`retro-button w-full max-w-md mb-4 ${
-                loading === 'fetch-news' ? 'opacity-50 cursor-not-allowed' : ''
+                loading === 'fetch-news-supa' ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
-              {loading === 'fetch-news' ? (
+              {loading === 'fetch-news-supa' ? (
                 <div className="flex items-center justify-center">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
                   FETCHING...
@@ -167,7 +167,7 @@ export default function Home() {
               )}
             </button>
             <p className="text-retro-gray text-sm font-mono">
-              fetch-news (legacy)
+              fetch-news-supa
             </p>
           </div>
         </div>
