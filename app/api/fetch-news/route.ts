@@ -40,55 +40,8 @@ const redis = new Redis({
 const USED_HEADLINES_KEY = 'used_headlines';
 
 const FONT_FILE_PATH = path.join(process.cwd(), 'public', 'fonts', 'ARIBLK.TTF');
-const INSTAGRAM_FONT_FAMILY = 'ArialBlack';
 let cachedFontPath: string | null = null;
 let cachedFontData: string | null = null;
-
-async function getFontData(): Promise<string | null> {
-  if (cachedFontData !== null && cachedFontPath === FONT_FILE_PATH) {
-    return cachedFontData;
-  }
-
-  try {
-    // Try multiple possible paths for Vercel serverless
-    const possiblePaths = [
-      path.resolve(process.cwd(), 'public', 'fonts', 'ARIBLK.TTF'),
-      path.resolve('/var/task/public/fonts/ARIBLK.TTF'),
-      path.resolve('/tmp/public/fonts/ARIBLK.TTF'),
-      path.join(process.cwd(), 'public', 'fonts', 'ARIBLK.TTF')
-    ];
-    
-    let fontBuffer: Buffer | null = null;
-    let usedPath: string | null = null;
-    
-    for (const fontPath of possiblePaths) {
-      try {
-        console.log(`Attempting to load font from: ${fontPath}`);
-        fontBuffer = await fs.readFile(fontPath);
-        usedPath = fontPath;
-        console.log(`Successfully loaded font from: ${fontPath}`);
-        break;
-      } catch (pathError) {
-        console.log(`Failed to load from ${fontPath}:`, pathError);
-        continue;
-      }
-    }
-    
-    if (!fontBuffer) {
-      throw new Error('Font not found in any of the attempted paths');
-    }
-    
-    cachedFontData = Buffer.from(fontBuffer).toString('base64');
-    cachedFontPath = FONT_FILE_PATH;
-    console.log(`Font loaded and cached from: ${usedPath}`);
-    return cachedFontData;
-  } catch (error) {
-    console.error('Failed to load font for Instagram image overlay:', error);
-    cachedFontData = null;
-    cachedFontPath = null;
-    return null;
-  }
-}
 
 // Function to read used headlines from Redis
 async function readUsedHeadlines(): Promise<string[]> {
@@ -182,54 +135,6 @@ function getRandomBackgroundColor() {
     'rgba(1, 20, 0, 0.8)'
   ];
   return colors[Math.floor(Math.random() * colors.length)];
-}
-
-type RGBColor = { r: number; g: number; b: number; a: number };
-
-function clampColorValue(value: number): number {
-  if (Number.isNaN(value)) return 0;
-  return Math.max(0, Math.min(255, Math.round(value)));
-}
-
-function parseRgba(color: string): RGBColor | null {
-  const match = color.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\)/i);
-  if (!match) return null;
-
-  const [, r, g, b, a] = match;
-  return {
-    r: clampColorValue(Number(r)),
-    g: clampColorValue(Number(g)),
-    b: clampColorValue(Number(b)),
-    a: a !== undefined ? Math.max(0, Math.min(1, Number(a))) : 1,
-  };
-}
-
-function toRgbaString({ r, g, b }: RGBColor, alpha: number): string {
-  return `rgba(${clampColorValue(r)}, ${clampColorValue(g)}, ${clampColorValue(b)}, ${Math.max(0, Math.min(1, Number(alpha)))})`;
-}
-
-function getTextColors(): { fill: string; stroke: string } {
-  const baseColor = getRandomBackgroundColor();
-  const parsed = parseRgba(baseColor);
-
-  if (!parsed) {
-    return {
-      fill: 'rgba(255, 255, 255, 1)',
-      stroke: 'rgba(0, 0, 0, 0.9)',
-    };
-  }
-
-  const strokeColor = {
-    r: Math.max(0, parsed.r - 150),
-    g: Math.max(0, parsed.g - 150),
-    b: Math.max(0, parsed.b - 150),
-    a: parsed.a,
-  };
-
-  return {
-    fill: 'rgba(255, 255, 255, 1)',
-    stroke: toRgbaString(strokeColor, 1),
-  };
 }
 
 // Function to validate URL
