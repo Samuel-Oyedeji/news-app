@@ -221,6 +221,112 @@ export default function Home() {
               generate-python-quiz
             </p>
           </div>
+
+          {/* JavaScript Quiz Button */}
+          <div className="text-center mt-8">
+            <button
+              onClick={async () => {
+                try {
+                  setLoading('generate-javascript-quiz');
+                  const res = await fetch('/api/generate-javascript-quiz', { method: 'POST' });
+                  const json = await res.json();
+
+                  if (json.success) {
+                    setResult({ success: true, message: 'JS Quiz generated successfully!' });
+                    setData({
+                      success: true,
+                      posts: [{
+                        headline: 'JavaScript Quiz Generated',
+                        originalHeadline: 'JavaScript Quiz',
+                        description: `Answer: ${json.quizData.answer}. Explanation: ${json.quizData.explanation}`,
+                        originalImage: null,
+                        caption: json.caption,
+                        editedImage: json.imageUrl,
+                        platformImages: { instagram: json.imageUrl },
+                        link: null,
+                        postPayload: { instagram: { image_url: json.imageUrl, caption: json.caption } }
+                      }]
+                    });
+                  } else {
+                    setResult({ success: false, error: json.error || 'Failed to generate quiz' });
+                  }
+                } catch (error) {
+                  console.error('JS Quiz generation error:', error);
+                  setResult({ success: false, error: 'Failed to generate quiz' });
+                } finally {
+                  setLoading(null);
+                }
+              }}
+              disabled={loading !== null}
+              className={`retro-button w-full max-w-md mb-4 ${loading === 'generate-javascript-quiz' ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+            >
+              {loading === 'generate-javascript-quiz' ? (
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
+                  GENERATING...
+                </div>
+              ) : (
+                'GENERATE JAVASCRIPT QUIZ'
+              )}
+            </button>
+            <p className="text-retro-gray text-sm font-mono">
+              generate-javascript-quiz
+            </p>
+          </div>
+
+          {/* Go Quiz Button */}
+          <div className="text-center mt-8">
+            <button
+              onClick={async () => {
+                try {
+                  setLoading('generate-go-quiz');
+                  const res = await fetch('/api/generate-go-quiz', { method: 'POST' });
+                  const json = await res.json();
+
+                  if (json.success) {
+                    setResult({ success: true, message: 'Go Quiz generated successfully!' });
+                    setData({
+                      success: true,
+                      posts: [{
+                        headline: 'Go Quiz Generated',
+                        originalHeadline: 'Go Quiz',
+                        description: `Answer: ${json.quizData.answer}. Explanation: ${json.quizData.explanation}`,
+                        originalImage: null,
+                        caption: json.caption,
+                        editedImage: json.imageUrl,
+                        platformImages: { instagram: json.imageUrl },
+                        link: null,
+                        postPayload: { instagram: { image_url: json.imageUrl, caption: json.caption } }
+                      }]
+                    });
+                  } else {
+                    setResult({ success: false, error: json.error || 'Failed to generate quiz' });
+                  }
+                } catch (error) {
+                  console.error('Go Quiz generation error:', error);
+                  setResult({ success: false, error: 'Failed to generate quiz' });
+                } finally {
+                  setLoading(null);
+                }
+              }}
+              disabled={loading !== null}
+              className={`retro-button w-full max-w-md mb-4 ${loading === 'generate-go-quiz' ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+            >
+              {loading === 'generate-go-quiz' ? (
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
+                  GENERATING...
+                </div>
+              ) : (
+                'GENERATE GO QUIZ'
+              )}
+            </button>
+            <p className="text-retro-gray text-sm font-mono">
+              generate-go-quiz
+            </p>
+          </div>
         </div>
 
         {/* Status Display */}
@@ -228,8 +334,8 @@ export default function Home() {
           <div className="retro-card max-w-4xl mx-auto p-6 mb-8">
             <h3 className="retro-text text-2xl font-bold mb-4">STATUS REPORT</h3>
             <div className={`p-4 rounded-lg border-2 ${result.success
-                ? 'border-neon-green bg-neon-green/10 text-neon-green'
-                : 'border-neon-pink bg-neon-pink/10 text-neon-pink'
+              ? 'border-neon-green bg-neon-green/10 text-neon-green'
+              : 'border-neon-pink bg-neon-pink/10 text-neon-pink'
               }`}>
               <p className="font-mono text-sm">
                 {result.success ? '✓ SUCCESS' : '✗ ERROR'}: {result.message || result.error}
