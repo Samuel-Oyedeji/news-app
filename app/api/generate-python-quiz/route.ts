@@ -105,8 +105,26 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
     const ctx = canvas.getContext('2d');
 
     // 1. Background
-    ctx.fillStyle = '#ffffff';
+    //  ctx.fillStyle = '#111111'; // Dark background
+    ctx.fillStyle = '#ffffff'; // Revert to White
     ctx.fillRect(0, 0, width, height);
+
+    // 1.5 Draw Python Logo Watermark
+    try {
+        const logoPath = path.resolve(process.cwd(), 'public', 'python-logo.png');
+        const logoImage = await loadImage(logoPath);
+
+        ctx.save();
+        ctx.globalAlpha = 0.3; // Low opacity
+        // Center the logo
+        const logoSize = 800;
+        const logoX = (width - logoSize) / 2;
+        const logoY = (height - logoSize) / 2;
+        ctx.drawImage(logoImage, logoX, logoY, logoSize, logoSize);
+        ctx.restore();
+    } catch (e) {
+        console.warn('Failed to load python logo:', e);
+    }
 
     // Register fonts (try to reuse existing or fallback)
     try {
@@ -120,33 +138,42 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
 
     // 2. Title "Python Quiz"
     ctx.font = 'bold 80px ArialBlack, sans-serif';
-    ctx.fillStyle = '#6200ea'; // Deep Purple
+    ctx.fillStyle = '#6200ea'; // Revert to Deep Purple
     ctx.textAlign = 'center';
-    ctx.fillText('Python Quiz', width / 2, 150);
+    ctx.fillText('Python Quiz', width / 2, 130);
 
     // 3. Code Block Container
     const codeBoxX = 100;
-    const codeBoxY = 250;
+    const codeBoxY = 200;
     const codeBoxW = width - 200;
-    const codeBoxH = 500;
+
+    // Dynamic Height Calculation
+    const lines = quizData.code.split('\n');
+    const lineHeight = 45;
+    const paddingTop = 70;
+    const paddingBottom = 70;
+    const calculatedHeight = paddingTop + (lines.length * lineHeight) + paddingBottom;
+    const codeBoxH = Math.max(calculatedHeight, 300); // Minimum height of 300
     const borderRadius = 20;
 
-    ctx.fillStyle = '#1e1e3f'; // Dark Blue/Grey
+    // Code box glow effect (Optional: kept subtle or removed, let's keep it subtle or remove for clean light look. Removing for clean look as per "back to light mode")
+    ctx.shadowColor = '#6200ea';
+    ctx.shadowBlur = 0; // No glow for clean light mode
+    ctx.fillStyle = '#1e1e3f'; // Dark Blue/Grey (Keep this dark for code contrast)
     ctx.beginPath();
     ctx.roundRect(codeBoxX, codeBoxY, codeBoxW, codeBoxH, borderRadius);
     ctx.fill();
+    ctx.shadowBlur = 0; // Reset shadow
 
     // 4. Draw Code with basic syntax highlighting
-    ctx.font = '40px monospace';
+    ctx.font = '35px monospace';
     ctx.textAlign = 'left';
-    const lines = quizData.code.split('\n');
-    let currentY = codeBoxY + 80;
-    const lineHeight = 50;
+
+    let currentY = codeBoxY + paddingTop;
     const startX = codeBoxX + 40;
 
     lines.forEach(line => {
         // Very basic tokenizer: split by space but keep delimiters (simplified)
-        // For this prototype, we'll just split by space and color known words
         const words = line.split(/(\s+|[(),:\[\]])/);
         let currentX = startX;
 
@@ -159,29 +186,39 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
     });
 
     // 5. Options Separator
-    ctx.strokeStyle = '#6200ea';
-    ctx.lineWidth = 2;
+    const separatorY = codeBoxY + codeBoxH + 50;
+
+    ctx.strokeStyle = '#6200ea'; // Revert to Deep Purple
+    ctx.lineWidth = 2; // Revert to 2
     ctx.setLineDash([15, 10]);
     ctx.beginPath();
-    ctx.moveTo(100, 820);
-    ctx.lineTo(width - 100, 820);
+    ctx.moveTo(100, separatorY);
+    ctx.lineTo(width - 100, separatorY);
     ctx.stroke();
     ctx.setLineDash([]);
 
     // 6. Draw Options
-    ctx.font = 'bold 45px ArialBlack, sans-serif';
-    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 35px ArialBlack, sans-serif';
+    ctx.fillStyle = '#000000'; // Revert to Black
     ctx.textAlign = 'left';
 
-    const optY1 = 900;
-    const optY2 = 980;
-    const col1X = 150;
-    const col2X = 600;
+    const optY1 = separatorY + 70;
+    const optY2 = optY1 + 80;
+    const col1X = 80;
+    const col2X = 560;
 
-    ctx.fillText(`A. ${quizData.options.A}`, col1X, optY1);
-    ctx.fillText(`B. ${quizData.options.B}`, col2X, optY1);
-    ctx.fillText(`C. ${quizData.options.C}`, col1X, optY2);
-    ctx.fillText(`D. ${quizData.options.D}`, col2X, optY2);
+    // Helper to truncate text to fit width (approximate)
+    const truncateOption = (text: string, maxLength: number) => {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength - 3) + '...';
+    };
+
+    const maxChars = 25; // Approximate max chars per column
+
+    ctx.fillText(`A. ${truncateOption(quizData.options.A, maxChars)}`, col1X, optY1);
+    ctx.fillText(`B. ${truncateOption(quizData.options.B, maxChars)}`, col2X, optY1);
+    ctx.fillText(`C. ${truncateOption(quizData.options.C, maxChars)}`, col1X, optY2);
+    ctx.fillText(`D. ${truncateOption(quizData.options.D, maxChars)}`, col2X, optY2);
 
     return canvas.toBuffer('image/jpeg');
 }
