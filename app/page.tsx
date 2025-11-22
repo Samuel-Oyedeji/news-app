@@ -99,16 +99,15 @@ export default function Home() {
           <h2 className="retro-text text-3xl font-bold text-center mb-8">
             CONTROL PANEL
           </h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Instagram Only Button */}
             <div className="text-center">
               <button
                 onClick={fetchAndPostInstagram}
                 disabled={loading !== null}
-                className={`retro-button w-full mb-4 ${
-                  loading === 'fetch-and-post' ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
+                className={`retro-button w-full mb-4 ${loading === 'fetch-and-post' ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
               >
                 {loading === 'fetch-and-post' ? (
                   <div className="flex items-center justify-center">
@@ -129,9 +128,8 @@ export default function Home() {
               <button
                 onClick={fetchAndPostAll}
                 disabled={loading !== null}
-                className={`retro-button w-full mb-4 ${
-                  loading === 'fetch-and-post-all' ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
+                className={`retro-button w-full mb-4 ${loading === 'fetch-and-post-all' ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
               >
                 {loading === 'fetch-and-post-all' ? (
                   <div className="flex items-center justify-center">
@@ -153,9 +151,8 @@ export default function Home() {
             <button
               onClick={fetchNews}
               disabled={loading !== null}
-              className={`retro-button w-full max-w-md mb-4 ${
-                loading === 'fetch-news-supa' ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+              className={`retro-button w-full max-w-md mb-4 ${loading === 'fetch-news-supa' ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
             >
               {loading === 'fetch-news-supa' ? (
                 <div className="flex items-center justify-center">
@@ -170,28 +167,81 @@ export default function Home() {
               fetch-news-supa
             </p>
           </div>
+
+          {/* Python Quiz Button */}
+          <div className="text-center mt-8">
+            <button
+              onClick={async () => {
+                try {
+                  setLoading('generate-python-quiz');
+                  const res = await fetch('/api/generate-python-quiz', { method: 'POST' });
+                  const json = await res.json();
+
+                  if (json.success) {
+                    setResult({ success: true, message: 'Quiz generated successfully!' });
+                    // Adapt the quiz response to fit the existing data structure for display
+                    setData({
+                      success: true,
+                      posts: [{
+                        headline: 'Python Quiz Generated',
+                        originalHeadline: 'Python Quiz',
+                        description: `Answer: ${json.quizData.answer}. Explanation: ${json.quizData.explanation}`,
+                        originalImage: null,
+                        caption: json.caption,
+                        editedImage: json.imageUrl,
+                        platformImages: { instagram: json.imageUrl },
+                        link: null,
+                        postPayload: { instagram: { image_url: json.imageUrl, caption: json.caption } }
+                      }]
+                    });
+                  } else {
+                    setResult({ success: false, error: json.error || 'Failed to generate quiz' });
+                  }
+                } catch (error) {
+                  console.error('Quiz generation error:', error);
+                  setResult({ success: false, error: 'Failed to generate quiz' });
+                } finally {
+                  setLoading(null);
+                }
+              }}
+              disabled={loading !== null}
+              className={`retro-button w-full max-w-md mb-4 ${loading === 'generate-python-quiz' ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+            >
+              {loading === 'generate-python-quiz' ? (
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
+                  GENERATING...
+                </div>
+              ) : (
+                'GENERATE PYTHON QUIZ'
+              )}
+            </button>
+            <p className="text-retro-gray text-sm font-mono">
+              generate-python-quiz
+            </p>
+          </div>
         </div>
 
         {/* Status Display */}
         {result && (
           <div className="retro-card max-w-4xl mx-auto p-6 mb-8">
             <h3 className="retro-text text-2xl font-bold mb-4">STATUS REPORT</h3>
-            <div className={`p-4 rounded-lg border-2 ${
-              result.success 
-                ? 'border-neon-green bg-neon-green/10 text-neon-green' 
+            <div className={`p-4 rounded-lg border-2 ${result.success
+                ? 'border-neon-green bg-neon-green/10 text-neon-green'
                 : 'border-neon-pink bg-neon-pink/10 text-neon-pink'
-            }`}>
+              }`}>
               <p className="font-mono text-sm">
                 {result.success ? '✓ SUCCESS' : '✗ ERROR'}: {result.message || result.error}
               </p>
             </div>
-            
+
             {result.instagramResults && result.instagramResults.length > 0 && (
               <div className="mt-4 p-4 bg-retro-dark/50 rounded-lg border border-neon-pink/30">
                 <h4 className="text-neon-pink font-bold mb-2">INSTAGRAM RESULTS:</h4>
                 {result.instagramResults.map((result, index) => (
                   <p key={index} className="font-mono text-sm text-retro-light">
-                    Post {index + 1}: {result.success ? '✓ Posted' : '✗ Failed'} 
+                    Post {index + 1}: {result.success ? '✓ Posted' : '✗ Failed'}
                     {result.post_id && ` (ID: ${result.post_id})`}
                     {result.error && ` - ${result.error}`}
                   </p>
@@ -204,7 +254,7 @@ export default function Home() {
                 <h4 className="text-neon-blue font-bold mb-2">X (TWITTER) RESULTS:</h4>
                 {result.xResults.map((result, index) => (
                   <p key={index} className="font-mono text-sm text-retro-light">
-                    Tweet {index + 1}: {result.success ? '✓ Posted' : '✗ Failed'} 
+                    Tweet {index + 1}: {result.success ? '✓ Posted' : '✗ Failed'}
                     {result.tweet_id && ` (ID: ${result.tweet_id})`}
                     {result.error && ` - ${result.error}`}
                   </p>
@@ -218,7 +268,7 @@ export default function Home() {
         {data && data.success && data.posts && data.posts.length > 0 && (
           <div className="retro-card max-w-4xl mx-auto p-6">
             <h3 className="retro-text text-2xl font-bold mb-6">LATEST NEWS</h3>
-            
+
             {data.posts.map((post, index) => (
               <div key={index} className="mb-8 p-6 bg-retro-dark/50 rounded-lg border border-neon-pink/20">
                 <h4 className="text-retro-light text-xl font-bold mb-3">
@@ -227,7 +277,7 @@ export default function Home() {
                 <p className="text-retro-gray mb-4">
                   {post.caption || 'No caption'}
                 </p>
-                
+
                 {post.editedImage && post.originalImage && (
                   <div className="relative">
                     <CldImage
@@ -256,11 +306,11 @@ export default function Home() {
                     />
                   </div>
                 )}
-                
+
                 {post.link && (
-                  <a 
-                    href={post.link} 
-                    target="_blank" 
+                  <a
+                    href={post.link}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block mt-4 px-4 py-2 bg-gradient-to-r from-neon-pink to-neon-blue text-white font-bold rounded-lg hover:scale-105 transition-transform"
                   >
