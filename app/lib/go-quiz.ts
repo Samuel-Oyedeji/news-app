@@ -218,8 +218,11 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
     ctx.fill();
 
     // 4. Draw Code with basic syntax highlighting
-    ctx.font = '35px monospace';
+    // Use a more reliable font stack that works on serverless environments
+    ctx.font = '35px "Courier New", Courier, "Liberation Mono", "DejaVu Sans Mono", monospace';
     ctx.textAlign = 'left';
+    // Ensure text baseline is set correctly
+    ctx.textBaseline = 'top';
 
     let currentY = codeBoxY + paddingTop;
     const startX = codeBoxX + 40;
@@ -241,8 +244,17 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
         let currentX = startX;
 
         words.forEach(word => {
-            if (word.trim().length > 0) {
-                ctx.fillStyle = getSyntaxColor(word.trim());
+            // Render all words including spaces - don't skip spaces
+            if (word.length > 0) {
+                // Get color for the word (trimmed for color lookup, but render the full word including spaces)
+                const trimmedWord = word.trim();
+                ctx.fillStyle = trimmedWord.length > 0 ? getSyntaxColor(trimmedWord) : '#f8f8f2'; // Default color for spaces
+                
+                // Always ensure we have a visible color
+                if (!ctx.fillStyle || ctx.fillStyle === 'transparent') {
+                    ctx.fillStyle = '#f8f8f2'; // Fallback to white/light color
+                }
+                
                 ctx.fillText(word, currentX, currentY);
                 currentX += ctx.measureText(word).width;
             }
