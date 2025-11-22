@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateGoQuizLogic } from '../generate-go-quiz/route';
+import { generateGoQuizLogic } from '../../lib/go-quiz';
 import { postToInstagram } from '@/lib/instagram';
 
 export const runtime = 'nodejs';

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generatePythonQuizLogic } from '../generate-python-quiz/route';
+import { generatePythonQuizLogic } from '../../lib/python-quiz';
 import { postToInstagram } from '@/lib/instagram';
 
 export const runtime = 'nodejs';
