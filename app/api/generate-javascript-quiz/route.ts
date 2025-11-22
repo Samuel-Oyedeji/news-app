@@ -131,7 +131,7 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
         if (!GlobalFonts.has('ArialBlack')) {
             GlobalFonts.registerFromPath(fontPath, 'ArialBlack');
         }
-    } catch (e) {
+    } catch {
         console.warn('Font registration failed, using default');
     }
 
@@ -253,7 +253,7 @@ export async function generateJavascriptQuizLogic() {
     console.log('Starting Supabase upload for:', fileName);
 
     let uploadSuccess = false;
-    let uploadError: any = null;
+    let uploadError: unknown = null;
     let retryCount = 0;
     const maxRetries = 3;
     let publicUrl = '';
@@ -264,7 +264,7 @@ export async function generateJavascriptQuizLogic() {
                 await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
             }
 
-            const { data, error } = await supabase.storage
+            const { error } = await supabase.storage
                 .from('news-images')
                 .upload(fileName, imageBuffer, {
                     contentType: 'image/jpeg',
@@ -283,7 +283,7 @@ export async function generateJavascriptQuizLogic() {
     }
 
     if (!uploadSuccess) {
-        throw new Error(`Failed to upload image to Supabase: ${uploadError?.message}`);
+        throw new Error(`Failed to upload image to Supabase: ${(uploadError as Error)?.message}`);
     }
 
     const { data: urlData } = supabase.storage
