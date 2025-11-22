@@ -193,7 +193,7 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
 
     // Dynamic Height Calculation
     const lines = quizData.code.split('\n').filter(line => line.trim().length > 0); // Filter empty lines
-    const lineHeight = 45;
+    const lineHeight = 38; // Reduced for smaller code font
     const paddingTop = 70;
     const paddingBottom = 70;
     const maxCodeLines = 8; // Limit code lines to prevent overflow
@@ -215,20 +215,23 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
     ctx.fill();
     ctx.shadowBlur = 0; // Reset shadow
 
-    // 4. Draw Code with basic syntax highlighting
-    // Use a more reliable font stack that works on serverless environments
-    ctx.font = '35px "Courier New", Courier, "Liberation Mono", "DejaVu Sans Mono", monospace';
+    // 4. Draw Code with syntax highlighting
+    ctx.font = '28px ArialBlack, sans-serif'; // Smaller font size for code-like appearance
     ctx.textAlign = 'left';
-    // Ensure text baseline is set correctly
-    ctx.textBaseline = 'top';
 
     let currentY = codeBoxY + paddingTop;
     const startX = codeBoxX + 40;
     const maxLineWidth = codeBoxW - 80; // Leave padding on both sides
 
     displayLines.forEach((line, index) => {
+        let displayLine = line.trim();
+        if (displayLine.length === 0) {
+            currentY += lineHeight;
+            return; // Skip empty lines but still advance
+        }
+        
         // Truncate long lines to prevent overflow
-        let displayLine = line;
+        ctx.font = '28px ArialBlack, sans-serif'; // Ensure font is set
         const metrics = ctx.measureText(displayLine);
         if (metrics.width > maxLineWidth) {
             // Truncate line to fit
@@ -238,22 +241,26 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
             displayLine = displayLine + '...';
         }
         
-        // Very basic tokenizer: split by space but keep delimiters (simplified)
+        // Split line into words for syntax highlighting
         const words = displayLine.split(/(\s+|[(),:\[\]])/);
         let currentX = startX;
 
         words.forEach(word => {
-            // Render all words including spaces - don't skip spaces
             if (word.length > 0) {
-                // Get color for the word (trimmed for color lookup, but render the full word including spaces)
+                // Get syntax color for the word
                 const trimmedWord = word.trim();
-                ctx.fillStyle = trimmedWord.length > 0 ? getSyntaxColor(trimmedWord) : '#f8f8f2'; // Default color for spaces
-                
-                // Always ensure we have a visible color
-                if (!ctx.fillStyle || ctx.fillStyle === 'transparent') {
-                    ctx.fillStyle = '#f8f8f2'; // Fallback to white/light color
+                if (trimmedWord.length > 0) {
+                    ctx.fillStyle = getSyntaxColor(trimmedWord);
+                } else {
+                    ctx.fillStyle = '#f8f8f2'; // Default color for spaces
                 }
                 
+                // Ensure we have a valid color
+                if (!ctx.fillStyle || ctx.fillStyle === 'transparent') {
+                    ctx.fillStyle = '#f8f8f2';
+                }
+                
+                // Render the word
                 ctx.fillText(word, currentX, currentY);
                 currentX += ctx.measureText(word).width;
             }
