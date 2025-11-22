@@ -72,9 +72,32 @@ async function generateQuizContent(retryCount = 0): Promise<{ code: string; opti
         let content = result.response.text();
         content = content.replace(/\`\`\`json\n|\n\`\`\`/g, '').trim();
         const parsed = JSON.parse(content);
+        
+        // Validate the parsed content
+        if (!parsed.code || typeof parsed.code !== 'string' || parsed.code.trim().length === 0) {
+            throw new Error('Invalid or empty code in quiz response');
+        }
+        
+        if (!parsed.options || typeof parsed.options !== 'object') {
+            throw new Error('Invalid or missing options in quiz response');
+        }
+        
+        // Validate each option exists and is a string
+        const requiredOptions = ['A', 'B', 'C', 'D'];
+        for (const opt of requiredOptions) {
+            if (!parsed.options[opt] || typeof parsed.options[opt] !== 'string' || parsed.options[opt].trim().length === 0) {
+                throw new Error(`Invalid or missing option ${opt} in quiz response`);
+            }
+        }
+        
+        if (!parsed.answer || !requiredOptions.includes(parsed.answer)) {
+            throw new Error('Invalid or missing answer in quiz response');
+        }
+        
         return parsed;
     } catch (error) {
         if (retryCount < 3) {
+            console.warn(`Quiz generation attempt ${retryCount + 1} failed, retrying...`, error);
             return generateQuizContent(retryCount + 1);
         }
         throw error;
@@ -96,6 +119,30 @@ function getSyntaxColor(word: string): string {
 }
 
 async function generateQuizImage(quizData: { code: string; options: { A: string; B: string; C: string; D: string } }) {
+    // Validate input data
+    if (!quizData || !quizData.code || typeof quizData.code !== 'string') {
+        throw new Error('Invalid quiz data: code is missing or invalid');
+    }
+    
+    if (!quizData.options || typeof quizData.options !== 'object') {
+        throw new Error('Invalid quiz data: options are missing or invalid');
+    }
+    
+    // Ensure all options exist with fallback values
+    const options = {
+        A: quizData.options.A || 'Option A',
+        B: quizData.options.B || 'Option B',
+        C: quizData.options.C || 'Option C',
+        D: quizData.options.D || 'Option D'
+    };
+    
+    // Log for debugging
+    console.log('Generating quiz image with:', {
+        codeLength: quizData.code.length,
+        codeLines: quizData.code.split('\n').length,
+        options: Object.keys(options).map(k => `${k}: ${options[k as keyof typeof options].substring(0, 30)}...`)
+    });
+    
     const width = 1080;
     const height = 1080;
     const canvas = createCanvas(width, height);
@@ -145,20 +192,26 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
     const codeBoxW = width - 200;
 
     // Dynamic Height Calculation
-    const lines = quizData.code.split('\n');
+    const lines = quizData.code.split('\n').filter(line => line.trim().length > 0); // Filter empty lines
     const lineHeight = 45;
     const paddingTop = 70;
     const paddingBottom = 70;
-    const calculatedHeight = paddingTop + (lines.length * lineHeight) + paddingBottom;
+    const maxCodeLines = 8; // Limit code lines to prevent overflow
+    const displayLines = lines.slice(0, maxCodeLines);
+    const calculatedHeight = paddingTop + (displayLines.length * lineHeight) + paddingBottom;
     const codeBoxH = Math.max(calculatedHeight, 300); // Minimum height of 300
     const borderRadius = 20;
+    
+    // Ensure code box doesn't take too much space (leave room for options)
+    const maxCodeBoxHeight = height - 400; // Leave 400px for title, separator, and options
+    const finalCodeBoxH = Math.min(codeBoxH, maxCodeBoxHeight);
 
     // Code box glow effect (Optional: kept subtle or removed, let's keep it subtle or remove for clean light look. Removing for clean look as per "back to light mode")
     ctx.shadowColor = '#6200ea';
     ctx.shadowBlur = 0; // No glow for clean light mode
     ctx.fillStyle = '#1e1e3f'; // Dark Blue/Grey (Keep this dark for code contrast)
     ctx.beginPath();
-    ctx.roundRect(codeBoxX, codeBoxY, codeBoxW, codeBoxH, borderRadius);
+    ctx.roundRect(codeBoxX, codeBoxY, codeBoxW, finalCodeBoxH, borderRadius);
     ctx.fill();
     ctx.shadowBlur = 0; // Reset shadow
 
@@ -168,22 +221,42 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
 
     let currentY = codeBoxY + paddingTop;
     const startX = codeBoxX + 40;
+    const maxLineWidth = codeBoxW - 80; // Leave padding on both sides
 
-    lines.forEach(line => {
+    displayLines.forEach((line, index) => {
+        // Truncate long lines to prevent overflow
+        let displayLine = line;
+        const metrics = ctx.measureText(displayLine);
+        if (metrics.width > maxLineWidth) {
+            // Truncate line to fit
+            while (ctx.measureText(displayLine + '...').width > maxLineWidth && displayLine.length > 0) {
+                displayLine = displayLine.slice(0, -1);
+            }
+            displayLine = displayLine + '...';
+        }
+        
         // Very basic tokenizer: split by space but keep delimiters (simplified)
-        const words = line.split(/(\s+|[(),:\[\]])/);
+        const words = displayLine.split(/(\s+|[(),:\[\]])/);
         let currentX = startX;
 
         words.forEach(word => {
-            ctx.fillStyle = getSyntaxColor(word.trim());
-            ctx.fillText(word, currentX, currentY);
-            currentX += ctx.measureText(word).width;
+            if (word.trim().length > 0) {
+                ctx.fillStyle = getSyntaxColor(word.trim());
+                ctx.fillText(word, currentX, currentY);
+                currentX += ctx.measureText(word).width;
+            }
         });
         currentY += lineHeight;
     });
 
     // 5. Options Separator
-    const separatorY = codeBoxY + codeBoxH + 50;
+    const separatorY = codeBoxY + finalCodeBoxH + 50;
+    
+    // Ensure separator and options are within canvas bounds
+    if (separatorY > height - 200) {
+        console.warn('Code box too tall, adjusting layout');
+        // Adjust separator position to fit
+    }
 
     ctx.strokeStyle = '#6200ea'; // Revert to Deep Purple
     ctx.lineWidth = 2; // Revert to 2
@@ -211,11 +284,18 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
     };
 
     const maxChars = 25; // Approximate max chars per column
+    
+    // Ensure options are rendered within canvas bounds
+    if (optY2 + 50 > height) {
+        console.warn('Options would overflow canvas, adjusting positions');
+        // Could adjust font size or positions here if needed
+    }
 
-    ctx.fillText(`A. ${truncateOption(quizData.options.A, maxChars)}`, col1X, optY1);
-    ctx.fillText(`B. ${truncateOption(quizData.options.B, maxChars)}`, col2X, optY1);
-    ctx.fillText(`C. ${truncateOption(quizData.options.C, maxChars)}`, col1X, optY2);
-    ctx.fillText(`D. ${truncateOption(quizData.options.D, maxChars)}`, col2X, optY2);
+    // Use validated options with fallbacks
+    ctx.fillText(`A. ${truncateOption(options.A || 'Option A', maxChars)}`, col1X, optY1);
+    ctx.fillText(`B. ${truncateOption(options.B || 'Option B', maxChars)}`, col2X, optY1);
+    ctx.fillText(`C. ${truncateOption(options.C || 'Option C', maxChars)}`, col1X, optY2);
+    ctx.fillText(`D. ${truncateOption(options.D || 'Option D', maxChars)}`, col2X, optY2);
 
     return canvas.toBuffer('image/jpeg');
 }
