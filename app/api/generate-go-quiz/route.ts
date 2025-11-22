@@ -224,85 +224,88 @@ async function generateQuizImage(quizData: { code: string; options: { A: string;
     return canvas.toBuffer('image/jpeg');
 }
 
+export async function generateGoQuizLogic() {
+    // 1. Generate Content
+    let quizContent;
+    let isUnique = false;
+    let attempts = 0;
+    const usedQuizzes = await readUsedQuizzes();
+
+    while (!isUnique && attempts < 3) {
+        quizContent = await generateQuizContent();
+        const hash = Buffer.from(quizContent.code).toString('base64');
+
+        if (!usedQuizzes.includes(hash)) {
+            isUnique = true;
+            await appendUsedQuiz(hash);
+        } else {
+            attempts++;
+        }
+    }
+
+    if (!quizContent) {
+        throw new Error('Failed to generate unique quiz content');
+    }
+
+    // 2. Generate Image
+    const imageBuffer = await generateQuizImage(quizContent);
+
+    // 3. Upload to Supabase
+    const fileName = `go-images/go-quiz-${Date.now()}.jpg`;
+    console.log('Starting Supabase upload for:', fileName);
+
+    let uploadSuccess = false;
+    let uploadError: any = null;
+    let retryCount = 0;
+    const maxRetries = 3;
+    let publicUrl = '';
+
+    while (!uploadSuccess && retryCount < maxRetries) {
+        try {
+            if (retryCount > 0) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+            }
+
+            const { data, error } = await supabase.storage
+                .from('news-images')
+                .upload(fileName, imageBuffer, {
+                    contentType: 'image/jpeg',
+                    cacheControl: '3600',
+                    upsert: true,
+                });
+
+            if (error) throw error;
+
+            uploadSuccess = true;
+        } catch (err) {
+            console.error(`Upload attempt ${retryCount + 1} failed:`, err);
+            uploadError = err;
+            retryCount++;
+        }
+    }
+
+    if (!uploadSuccess) {
+        throw new Error(`Failed to upload image to Supabase: ${uploadError?.message}`);
+    }
+
+    const { data: urlData } = supabase.storage
+        .from('news-images')
+        .getPublicUrl(fileName);
+
+    publicUrl = urlData.publicUrl;
+
+    return {
+        success: true,
+        imageUrl: publicUrl,
+        caption: "Go (Golang) Question / Quiz; What is the output of the following Go code, and why? Comment your answers below!",
+        quizData: quizContent
+    };
+}
+
 export async function POST() {
     try {
-        // 1. Generate Content
-        let quizContent;
-        let isUnique = false;
-        let attempts = 0;
-        const usedQuizzes = await readUsedQuizzes();
-
-        while (!isUnique && attempts < 3) {
-            quizContent = await generateQuizContent();
-            const hash = Buffer.from(quizContent.code).toString('base64');
-
-            if (!usedQuizzes.includes(hash)) {
-                isUnique = true;
-                await appendUsedQuiz(hash);
-            } else {
-                attempts++;
-            }
-        }
-
-        if (!quizContent) {
-            throw new Error('Failed to generate unique quiz content');
-        }
-
-        // 2. Generate Image
-        const imageBuffer = await generateQuizImage(quizContent);
-
-        // 3. Upload to Supabase
-        const fileName = `go-images/go-quiz-${Date.now()}.jpg`;
-        console.log('Starting Supabase upload for:', fileName);
-
-        let uploadSuccess = false;
-        let uploadError: any = null;
-        let retryCount = 0;
-        const maxRetries = 3;
-        let publicUrl = '';
-
-        while (!uploadSuccess && retryCount < maxRetries) {
-            try {
-                if (retryCount > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-                }
-
-                const { data, error } = await supabase.storage
-                    .from('news-images')
-                    .upload(fileName, imageBuffer, {
-                        contentType: 'image/jpeg',
-                        cacheControl: '3600',
-                        upsert: true,
-                    });
-
-                if (error) throw error;
-
-                uploadSuccess = true;
-            } catch (err) {
-                console.error(`Upload attempt ${retryCount + 1} failed:`, err);
-                uploadError = err;
-                retryCount++;
-            }
-        }
-
-        if (!uploadSuccess) {
-            throw new Error(`Failed to upload image to Supabase: ${uploadError?.message}`);
-        }
-
-        const { data: urlData } = supabase.storage
-            .from('news-images')
-            .getPublicUrl(fileName);
-
-        publicUrl = urlData.publicUrl;
-
-        // 4. Return Response
-        return NextResponse.json({
-            success: true,
-            imageUrl: publicUrl,
-            caption: "Go (Golang) Question / Quiz; What is the output of the following Go code, and why? Comment your answers below!",
-            quizData: quizContent
-        });
-
+        const result = await generateGoQuizLogic();
+        return NextResponse.json(result);
     } catch (error) {
         console.error('Error generating Go quiz:', error);
         return NextResponse.json(

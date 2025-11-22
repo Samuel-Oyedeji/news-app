@@ -327,6 +327,96 @@ export default function Home() {
               generate-go-quiz
             </p>
           </div>
+
+          <div className="border-t border-retro-gray my-8 w-full max-w-md"></div>
+          <h2 className="text-xl font-bold text-retro-white mb-6">INSTAGRAM POSTING</h2>
+
+          {/* Post Python Quiz Button */}
+          <div className="text-center">
+            <button
+              onClick={async () => {
+                try {
+                  setLoading('post-python-quiz');
+                  const res = await fetch('/api/post-python-quiz-instagram', { method: 'POST' });
+                  const json = await res.json();
+
+                  if (json.success) {
+                    setResult({ success: true, message: 'Python Quiz posted to Instagram!' });
+                  } else {
+                    setResult({ success: false, error: json.error || 'Failed to post quiz' });
+                  }
+                } catch (error) {
+                  console.error('Post error:', error);
+                  setResult({ success: false, error: 'Failed to post quiz' });
+                } finally {
+                  setLoading(null);
+                }
+              }}
+              disabled={loading !== null}
+              className={`retro-button w-full max-w-md mb-4 bg-blue-900 ${loading === 'post-python-quiz' ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+            >
+              {loading === 'post-python-quiz' ? 'POSTING...' : 'POST PYTHON QUIZ TO IG'}
+            </button>
+          </div>
+
+          {/* Post JS Quiz Button */}
+          <div className="text-center">
+            <button
+              onClick={async () => {
+                try {
+                  setLoading('post-js-quiz');
+                  const res = await fetch('/api/post-javascript-quiz-instagram', { method: 'POST' });
+                  const json = await res.json();
+
+                  if (json.success) {
+                    setResult({ success: true, message: 'JS Quiz posted to Instagram!' });
+                  } else {
+                    setResult({ success: false, error: json.error || 'Failed to post quiz' });
+                  }
+                } catch (error) {
+                  console.error('Post error:', error);
+                  setResult({ success: false, error: 'Failed to post quiz' });
+                } finally {
+                  setLoading(null);
+                }
+              }}
+              disabled={loading !== null}
+              className={`retro-button w-full max-w-md mb-4 bg-yellow-900 ${loading === 'post-js-quiz' ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+            >
+              {loading === 'post-js-quiz' ? 'POSTING...' : 'POST JS QUIZ TO IG'}
+            </button>
+          </div>
+
+          {/* Post Go Quiz Button */}
+          <div className="text-center">
+            <button
+              onClick={async () => {
+                try {
+                  setLoading('post-go-quiz');
+                  const res = await fetch('/api/post-go-quiz-instagram', { method: 'POST' });
+                  const json = await res.json();
+
+                  if (json.success) {
+                    setResult({ success: true, message: 'Go Quiz posted to Instagram!' });
+                  } else {
+                    setResult({ success: false, error: json.error || 'Failed to post quiz' });
+                  }
+                } catch (error) {
+                  console.error('Post error:', error);
+                  setResult({ success: false, error: 'Failed to post quiz' });
+                } finally {
+                  setLoading(null);
+                }
+              }}
+              disabled={loading !== null}
+              className={`retro-button w-full max-w-md mb-4 bg-cyan-900 ${loading === 'post-go-quiz' ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+            >
+              {loading === 'post-go-quiz' ? 'POSTING...' : 'POST GO QUIZ TO IG'}
+            </button>
+          </div>
         </div>
 
         {/* Status Display */}
