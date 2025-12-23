@@ -23,7 +23,7 @@
     "file-type": "^21.0.0",
     "image-size": "^2.0.2",
     "lucide-react": "^0.544.0",
-    "next": "15.5.0",
+    "next": "15.5.9",
     "next-cloudinary": "^6.16.0",
     "node-fetch": "^3.3.2",
     "pdf-lib": "^1.17.1",
